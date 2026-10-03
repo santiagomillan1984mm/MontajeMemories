@@ -122,6 +122,12 @@ details[open] summary::after{content:'−'}
 .method{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;background:var(--surface-2)}
 .method>div{min-width:0}.method b{display:block;font-size:13.5px}.method span{display:block;font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:2px}.method .btn{flex:none}
 .nomeas{margin-top:16px;border-top:1px dashed var(--line);padding-top:12px}.nomeas .eyebrow{color:var(--gold)}
+.trcard{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:12px 14px}
+.revl{display:grid;gap:6px}
+.revi{display:flex;gap:8px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.35}
+.revi .dot{flex:none;width:9px;height:9px;border-radius:50%;margin-top:4px;background:var(--gold)}
+.revi.bad .dot{background:var(--danger)}.revi.info .dot{background:var(--accent)}
+.revi:hover{border-color:var(--accent)}
 .swname{font-size:12px;color:var(--muted);font-weight:500}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 hr{border:0;border-top:1px solid var(--line);margin:16px 0}
@@ -728,6 +734,7 @@ function render(){
   const W=cv.width/dpr,H=cv.height/dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=css('--stage')||'#E1E6DF';ctx.fillRect(0,0,W,H);
   ctx.setTransform(dpr*view.z,0,0,dpr*view.z,-view.x*view.z*dpr,-view.y*view.z*dpr);
   drawScene(ctx,view.z,{});
+  drawReview(ctx,view.z);
   if(mode==='refscale'&&REF){const g=css('--gold')||'#A9843F',k=DEFS[REF.it.t].kind;ctx.save();ctx.globalAlpha=.82;drawItem(ctx,REF.it,view.z,{});ctx.restore();
     ctx.save();ctx.translate(REF.it.x,REF.it.y);ctx.rotate(REF.it.r*Math.PI/180);ctx.strokeStyle=g;ctx.lineWidth=2.5/view.z;ctx.setLineDash([7/view.z,5/view.z]);if(TBL.has(k))linenPath(ctx,REF.it,k,0);else{ctx.beginPath();ctx.rect(-24,-24,48,48)}ctx.stroke();ctx.restore()}
   const s=P.items.find(i=>i.id===sel);
@@ -839,7 +846,7 @@ function updateHint(){const h=$('#hint');const btnX=t=>`<button class="btn sm" i
 
 /* ---------- Historial y guardado ---------- */
 function snapshot(){return JSON.stringify({items:P.items,venue:{...P.venue},settings:P.settings,event:P.event})}
-function commit(){const s=snapshot();if(hist[hpos]===s)return;hist=hist.slice(0,hpos+1);hist.push(s);if(hist.length>80)hist.shift();hpos=hist.length-1;dirty=true;syncUndo();save();queue3D();if(!$('#tab-inv').hidden)renderInv()}
+function commit(){const s=snapshot();if(hist[hpos]===s)return;hist=hist.slice(0,hpos+1);hist.push(s);if(hist.length>80)hist.shift();hpos=hist.length-1;dirty=true;syncUndo();save();queue3D();if(REV){showReview(review(),true)}if(!$('#tab-inv').hidden)renderInv()}
 function restore(s){const o=JSON.parse(s);P.items=o.items;Object.assign(P.venue,o.venue);P.settings=o.settings;P.event=o.event;if(!P.items.find(i=>i.id===sel))sel=null;dirty=true;renderEdit();renderVenue();renderInv();save();queue3D()}
 function undo(){if(hpos>0){hpos--;restore(hist[hpos]);syncUndo()}}
 function redo(){if(hpos<hist.length-1){hpos++;restore(hist[hpos]);syncUndo()}}
@@ -889,7 +896,7 @@ function thumb(key){const c=document.createElement('canvas');const r=2;c.width=5
   const it=makeItem(key,0,0);const b=bounds(it);const s=Math.min(48/(b.x1-b.x0),48/(b.y1-b.y0),key==='columna'||key==='bocina'?.6:2);
   x.setTransform(s*r,0,0,s*r,28*r-(b.x0+b.x1)/2*s*r,28*r-(b.y0+b.y1)/2*s*r);drawItem(x,it,s,{export:true});return c}
 function renderAdd(){
-  const el=$('#tab-add');let h=`<section><p class="eyebrow">Toca un elemento para colocarlo en el centro de la vista</p></section>`;
+  const el=$('#tab-add');let h=`<section class="trcard"><b>¿Ya tienes un layout hecho?</b><p class="note" style="margin:4px 0 10px">Súbelo en PDF o imagen y la IA lo transcribe: mesas, pista, barra y más, listas para editar y ver en 3D.</p><button class="btn primary sm" id="aTr">Transcribir layout con IA</button></section><section><p class="eyebrow">O toca un elemento para colocarlo en el centro de la vista</p></section>`;
   for(const [ck,cn] of CATS){h+=`<section><h3>${cn}</h3><div class="catgrid" data-cat="${ck}"></div></section>`}
   h+=`<section><h3>Varias mesas a la vez</h3>
   <div class="two"><div class="field"><label for="gT">Tipo</label><select id="gT">${['redonda','rectangular','cuadrada','imperial','ovalada','periquera'].map(k=>`<option value="${k}">${DEFS[k].name}</option>`).join('')}</select></div>
@@ -897,7 +904,7 @@ function renderAdd(){
   <div class="field"><label for="gC">Columnas</label><input id="gC" type="number" min="1" max="30" value="5"></div>
   <div class="field"><label for="gS">Pasillo entre mesas (m)</label><input id="gS" type="number" min="0" step="0.1" value="1.5"></div></div>
   <button class="btn primary" id="gGo">Colocar mesas</button><p class="note">Se numeran solas y usan el último estilo de mantel y silla que elegiste. Se recomienda dejar al menos 1.5 m entre respaldos para que pasen meseros.</p></section>`;
-  el.innerHTML=h;
+  el.innerHTML=h;$('#aTr').onclick=startTranscribe;
   for(const [k,d] of Object.entries(DEFS)){const g=el.querySelector(`[data-cat="${d.cat}"]`);const b=document.createElement('button');b.className='cat';b.type='button';b.appendChild(thumb(k));const s=document.createElement('span');s.textContent=d.name;b.appendChild(s);b.onclick=()=>addAtCenter(k);g.appendChild(b)}
   $('#gGo').onclick=()=>{const k=$('#gT').value,n=clamp(+$('#gN').value||1,1,200),cols=clamp(+$('#gC').value||1,1,30),gap=Math.max(0,+$('#gS').value||0)*100;
     const t=makeItem(k,0,0),b=bounds(t),pw=b.x1-b.x0+gap,ph=b.y1-b.y0+gap,rows=Math.ceil(n/cols);const r=cv.getBoundingClientRect(),c=s2w(r.width/2,r.height/2);
@@ -1025,6 +1032,8 @@ function renderVenue(){
   </section>`:''}
   ${v.mode==='image'&&v.img?'':`<section><h3>Salón en blanco</h3><p class="note" style="margin-bottom:10px">Si no tienes plano, dibuja el salón con sus medidas y agrega muros, columnas y entradas desde Agregar.</p>
   <div class="two"><div class="field"><label for="vRW">Ancho (m)</label><input id="vRW" type="number" step="0.5" min="2" value="${v.w/100}"></div><div class="field"><label for="vRH">Largo (m)</label><input id="vRH" type="number" step="0.5" min="2" value="${v.h/100}"></div></div></section>`}
+  <section><h3>¿Ya tienes un layout hecho?</h3><p class="note" style="margin-bottom:10px">Sube un render, plano o PDF con las mesas ya dibujadas. La IA las cuenta y las coloca para que las edites, las veas en 3D y las mejores.</p><button class="btn primary" id="vTr">Transcribir layout con IA</button></section>
+  <section id="secRev"><h3>Revisar y mejorar</h3><p class="note" style="margin-bottom:10px">Revisa que haya 1.50 m entre mesas, pasillos libres, nada encima de la pista y lugares suficientes.</p><div class="actions"><button class="btn" id="vRev">Revisar distribución</button><button class="btn" id="vArr">Ordenar automáticamente</button>${REV?'<button class="btn" id="vRevX">Ocultar avisos</button>':''}</div><div id="revList"></div></section>
   <section><h3>Ayudas</h3><label class="check"><input type="checkbox" id="vGrid" ${P.settings.grid?'checked':''}> Cuadrícula de 1 m</label><label class="check" style="margin-top:6px"><input type="checkbox" id="vSnap" ${P.settings.snap?'checked':''}> Ajustar posición cada 10 cm</label></section>`;
   el.querySelectorAll('[data-e]').forEach(i=>{i.addEventListener('input',()=>{P.event[i.dataset.e]=i.type==='number'?(+i.value||0):i.value;save()});i.addEventListener('change',commit)});
   $('#vFile').onchange=ev=>{const f=ev.target.files[0];if(f)loadPlan(f);ev.target.value=''};
@@ -1033,6 +1042,7 @@ function renderVenue(){
   const rm=$('#vRm');if(rm)rm.onclick=()=>{P.venue.mode='blank';P.venue.img=null;commit();renderVenue();fit()};
   const op=$('#vOp');if(op){op.oninput=()=>{P.venue.opacity=+op.value;dirty=true};op.onchange=commit}
   const rw=$('#vRW'),rh=$('#vRH');if(rw){const f=()=>{P.venue.w=Math.max(200,Math.round((+rw.value||2)*100));P.venue.h=Math.max(200,Math.round((+rh.value||2)*100));dirty=true};rw.oninput=f;rh.oninput=f;rw.onchange=rh.onchange=()=>{commit();fit()}}
+  $('#vTr').onclick=startTranscribe;$('#vRev').onclick=()=>{showReview(review())};$('#vArr').onclick=autoArrange;const rx=$('#vRevX');if(rx)rx.onclick=()=>{REV=null;dirty=true;renderVenue()};if(REV)showReview(REV.list,true);
   $('#vGrid').onchange=e2=>{P.settings.grid=e2.target.checked;commit()};$('#vSnap').onchange=e2=>{P.settings.snap=e2.target.checked;commit()};
 }
 function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('No se pudo cargar '+src));document.head.appendChild(s)})}
@@ -1110,6 +1120,115 @@ function renderProj(){
   $('#pSave').onclick=async()=>{await saveFile(fname('json'),JSON.stringify(P))};
   $('#pOpen').onchange=async ev=>{const f=ev.target.files[0];ev.target.value='';if(!f)return;try{const o=JSON.parse(await f.text());if(!o.items||!o.venue)throw 0;o.id=uid();loadProject(o);save();toast('Proyecto abierto.')}catch(e){toast('Ese archivo no es un proyecto de Montaje.')}};
 }
+
+/* ---------- Transcribir layout con IA y revisar distribución ---------- */
+const LAYMAP={mesa_redonda:'redonda',mesa_ovalada:'ovalada',mesa_rectangular:'rectangular',mesa_cuadrada:'cuadrada',mesa_serpentina:'serpentina',mesa_novios:'novios',mesa_honor:'honor',periquera:'periquera',pista:'pista',escenario:'tarima',dj:'dj',barra:'barra',pastel:'pastel',postres:'postres',regalos:'regalos',bienvenida:'bienvenida',photobooth:'photobooth',lounge:'lounge',arco:'arco',entrada:'entrada',banos:'banos',cocina:'cocina',columna:'columna',muro:'pared',planta:'planta',pantalla:'pantalla',sillas_ceremonia:'ceremonia',otro:'area'};
+function gmodal(html){let m=$('#gModal');if(!m){m=document.createElement('div');m.className='modal';m.id='gModal';m.innerHTML='<div class="sheet" role="dialog" aria-modal="true"></div>';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m&&!m.dataset.busy)m.hidden=true})}m.querySelector('.sheet').innerHTML=html;m.hidden=false;delete m.dataset.busy;return m.querySelector('.sheet')}
+function gclose(){const m=$('#gModal');if(m)m.hidden=true}
+async function fileToImg(f,max){max=max||2400;let src;
+  if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){const base='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+    await loadScript(base+'pdf.min.js');await loadScript(base+'pdf.worker.min.js');const lib=window.pdfjsLib;lib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';
+    const pdf=await lib.getDocument({data:await f.arrayBuffer()}).promise;const pg=await pdf.getPage(1);const vp0=pg.getViewport({scale:1});const sc=Math.min(3,max/Math.max(vp0.width,vp0.height));const vp=pg.getViewport({scale:sc});
+    const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:x,viewport:vp}).promise;src=c.toDataURL('image/jpeg',.85)}
+  else{const url=URL.createObjectURL(f);const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});const sc=Math.min(1,max/Math.max(im.width,im.height));
+    const c=document.createElement('canvas');c.width=Math.round(im.width*sc);c.height=Math.round(im.height*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);src=c.toDataURL('image/jpeg',.85)}
+  const im=new Image();await new Promise((r,j)=>{im.onload=r;im.onerror=j;im.src=src});return {src,w:im.width,h:im.height,im}}
+function smallB64(img,max){const s=Math.min(1,max/Math.max(img.w,img.h)),c=document.createElement('canvas');c.width=Math.round(img.w*s);c.height=Math.round(img.h*s);c.getContext('2d').drawImage(img.im,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.9).split(',')[1]}
+function askCode(wrong){return new Promise(res=>{const sh=gmodal(`<h2>Código de acceso</h2><p class="note">${wrong?'<b style="color:var(--danger)">Código incorrecto.</b> ':''}Escribe el código que pusiste en Vercel (MONTAJE_CODIGO). Solo se pide una vez en este navegador.</p><div class="field" style="margin-top:12px"><input type="text" id="cdIn" autocomplete="off"></div><div class="actions"><button class="btn" id="cdX">Cancelar</button><button class="btn primary" id="cdOk">Continuar</button></div>`);
+  const i=sh.querySelector('#cdIn');i.focus();sh.querySelector('#cdX').onclick=()=>{gclose();res('')};const ok=()=>{const v=i.value.trim();if(v){res(v)}};sh.querySelector('#cdOk').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok()}})}
+async function callLayout(b64,onWait){let code='';try{code=LS.get('montaje.codigo')||''}catch(e){}
+  for(let i=0;i<3;i++){let r;onWait&&onWait();try{r=await fetch('/api/layout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({b64,mime:'image/jpeg',codigo:code})})}catch(e){throw new Error('La lectura con IA funciona en la app publicada (montaje en Vercel), no en esta vista previa.')}
+    if(r.status===404)throw new Error('La lectura con IA funciona en la app publicada (montaje en Vercel), no en esta vista previa.');
+    const j=await r.json().catch(()=>({error:'Respuesta no válida ('+r.status+')'}));
+    if(r.status===401&&j.needCode){code=await askCode(i>0||!!(LS.get('montaje.codigo')));if(!code)throw new Error('Se necesita el código para usar la IA.');LS.del('montaje.codigo');continue}
+    if(!r.ok)throw new Error(j.error||('Error '+r.status));LS.set('montaje.codigo',code);return j.data}
+  throw new Error('Código incorrecto.')}
+function startTranscribe(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';inp.onchange=()=>{const f=inp.files[0];if(f)transcribe(f)};inp.click()}
+async function transcribe(f){let img;try{toast('Preparando el layout…');img=await fileToImg(f)}catch(e){toast('No se pudo abrir ese archivo. Prueba con PDF, JPG o PNG.');return}
+  const has=P.items.length;
+  const sh=gmodal(`<h2>Transcribir layout</h2><p class="note">La IA cuenta las mesas y elementos del layout y los coloca en Montaje para que los edites, los veas en 3D y los mejores.</p>
+   <img src="${img.src}" alt="Layout a transcribir" style="width:100%;max-height:38vh;object-fit:contain;border:1px solid var(--line);border-radius:10px;margin:12px 0;background:#fff">
+   <label class="check"><input type="checkbox" id="tlBg" checked> Usar esta imagen como plano de fondo</label>
+   ${has?`<div style="margin-top:8px"><label class="check"><input type="radio" name="tlM" value="rep" checked> Reemplazar lo que ya tengo acomodado (${has} elementos)</label><label class="check" style="margin-top:4px"><input type="radio" name="tlM" value="add"> Agregar a lo que ya tengo</label></div>`:''}
+   <p class="note">Usa tu estilo actual de mesa (mantel, sillas, centros). Las posiciones salen aproximadas: revísalas.</p>
+   <p class="note" id="tlMsg" aria-live="polite"></p>
+   <div class="actions"><button class="btn" id="tlX">Cancelar</button><button class="btn primary" id="tlGo">Transcribir con IA</button></div>`);
+  sh.querySelector('#tlX').onclick=gclose;
+  sh.querySelector('#tlGo').onclick=async()=>{const bg=sh.querySelector('#tlBg').checked,mode=(sh.querySelector('[name="tlM"]:checked')||{}).value||'rep';
+    const go=sh.querySelector('#tlGo'),msg=sh.querySelector('#tlMsg');go.disabled=true;$('#gModal').dataset.busy='1';
+    try{const data=await callLayout(smallB64(img,1568),()=>{msg.textContent='La IA está leyendo el layout… puede tardar hasta un minuto.'});gclose();applyLayout(data,img,{bg,mode})}
+    catch(e){if($('#gModal').hidden)transcribe(f);else{delete $('#gModal').dataset.busy;go.disabled=false;msg.textContent=e.message}}}}
+function applyLayout(data,img,opt){const els=(data.elementos||[]).filter(e=>isFinite(e.cx)&&isFinite(e.cy));if(!els.length){toast('La IA no encontró mesas en esa imagen.');return}
+  const W=img.w,H=img.h,s=data.salon&&data.salon.x1>data.salon.x0&&data.salon.y1>data.salon.y0?data.salon:null;let cpp=null,how='';
+  if(s&&s.ancho_m>0){cpp=s.ancho_m*100/((s.x1-s.x0)*W);how='con las medidas escritas en el plano'}
+  else if(s&&s.largo_m>0){cpp=s.largo_m*100/((s.y1-s.y0)*H);how='con las medidas escritas en el plano'}
+  else{const ds=els.filter(e=>e.tipo==='mesa_redonda'&&e.w>0).map(e=>(e.w*W+e.h*H)/2).sort((a,b)=>a-b);if(ds.length){cpp=150/ds[ds.length>>1];how='suponiendo mesas redondas de Ø1.50 m'}}
+  if(!cpp||!isFinite(cpp)){cpp=3000/W;how='aproximada (sin referencia)'}
+  if(opt.mode==='rep')P.items=[];
+  let ox=0,oy=0;
+  if(opt.bg){imgCache[img.src]=img.im;Object.assign(P.venue,{mode:'image',img:img.src,imgW:W,imgH:H,cmPerPx:cpp,opacity:.5,calib:'IA, '+how})}
+  else if(opt.mode==='rep'){const bx=s||{x0:Math.min(...els.map(e=>e.cx-e.w)),y0:Math.min(...els.map(e=>e.cy-e.h)),x1:Math.max(...els.map(e=>e.cx+e.w)),y1:Math.max(...els.map(e=>e.cy+e.h))};
+    ox=Math.max(0,bx.x0)*W*cpp;oy=Math.max(0,bx.y0)*H*cpp;Object.assign(P.venue,{mode:'blank',img:null,w:Math.max(500,Math.round((Math.min(1,bx.x1)-Math.max(0,bx.x0))*W*cpp/10)*10),h:Math.max(500,Math.round((Math.min(1,bx.y1)-Math.max(0,bx.y0))*H*cpp/10)*10)})}
+  let nT=0,nZ=0,num=opt.mode==='rep'?1:nextNum();
+  for(const e of els.sort((a,b)=>Math.abs(a.cy-b.cy)>.04?a.cy-b.cy:a.cx-b.cx)){const key=LAYMAP[e.tipo]||'area',d=DEFS[key];const wcm=Math.max(0,e.w)*W*cpp,hcm=Math.max(0,e.h)*H*cpp;
+    const over={r:((Math.round((+e.rotacion||0)/5)*5)%360+360)%360};
+    if(d.kind==='round'){const dia=(wcm+hcm)/2;over.w=over.h=key==='periquera'?(dia<65?60:dia<75?70:80):[120,150,180].reduce((a,b)=>Math.abs(b-dia)<Math.abs(a-dia)?b:a)}
+    else if(TBL.has(d.kind)&&d.kind!=='serp'){const L=Math.max(wcm,hcm),A=Math.min(wcm,hcm);if(hcm>wcm*1.15&&!over.r)over.r=90;
+      if(d.kind==='square')over.w=over.h=clamp(Math.round(L/10)*10,80,250);else{over.w=clamp(Math.round(L/10)*10,120,1500);over.h=clamp(Math.round(A/5)*5,60,160)}}
+    else if(d.kind==='zone'&&!['columna','planta','entrada','bocina'].includes(key)&&wcm>20&&hcm>10){over.w=Math.round(wcm/10)*10;over.h=Math.round(hcm/10)*10}
+    const it=makeItem(key,Math.round((e.cx*W*cpp-ox)/5)*5,Math.round((e.cy*H*cpp-oy)/5)*5,over);
+    if(TBL.has(d.kind)){nT++;if(e.sillas!=null&&e.sillas>=0&&!d.cocktail)it.seats=clamp(Math.round(e.sillas),0,60);else if(d.kind==='round'&&!d.cocktail)it.seats=it.w<=120?8:it.w<=150?10:12;else if(d.kind==='rect'&&!d.oneSide)it.seats=Math.max(2,Math.round(it.w/60)*2);
+      const lb=(e.etiqueta||'').trim();it.label=lb?(/^\d+$/.test(lb)?'Mesa '+lb:lb):(d.oneSide?(key==='novios'?'Novios':''):d.cocktail?'':'Mesa '+(num++))}
+    else nZ++;
+    P.items.push(it)}
+  if(data.invitados&&!P.event.guests)P.event.guests=data.invitados;
+  sel=null;commit();renderAll();fit();if(T3.on)queue3D();
+  const rv=review();showReview(rv);const nd=(data.dudosos||[]).length;
+  toast(`Transcribí ${nT} mesas y ${nZ} elementos. Escala ${how}.${nd?' Revisa: '+data.dudosos.slice(0,3).join(', ')+'.':''}`)}
+
+/* Revisar distribución */
+let REV=null;
+const BLOCK=['pista','barra','dj','tarima','lounge','photobooth','pastel','postres','regalos','bienvenida','banos','cocina','columna','pared','arco'];
+function topOnly(it){return bounds(Object.assign({},it,{seats:0}))}
+function edgeGap(a,b,withChairs){const ka=DEFS[a.t].kind,kb=DEFS[b.t].kind;
+  if(ka==='round'&&kb==='round'){const ra=(withChairs?bounds(a):topOnly(a)).x1,rb=(withChairs?bounds(b):topOnly(b)).x1;return Math.hypot(a.x-b.x,a.y-b.y)-ra-rb}
+  const box=it=>{const b0=withChairs?bounds(it):topOnly(it);const pts=[[b0.x0,b0.y0],[b0.x1,b0.y0],[b0.x1,b0.y1],[b0.x0,b0.y1]].map(p=>toWorldPt(it,p[0],p[1]));return {x0:Math.min(...pts.map(p=>p.x)),y0:Math.min(...pts.map(p=>p.y)),x1:Math.max(...pts.map(p=>p.x)),y1:Math.max(...pts.map(p=>p.y))}};
+  const A=box(a),B=box(b),dx=Math.max(B.x0-A.x1,A.x0-B.x1),dy=Math.max(B.y0-A.y1,A.y0-B.y1);if(dx<0&&dy<0)return Math.max(dx,dy);return Math.hypot(Math.max(0,dx),Math.max(0,dy))}
+function review(){const out=[],ts=P.items.filter(i=>TBL.has(DEFS[i.t].kind)),zs=P.items.filter(i=>BLOCK.includes(i.t)),nm=i=>i.label||DEFS[i.t].name,cm=v=>Math.max(0,Math.round(v))+' cm';
+  for(let i=0;i<ts.length;i++)for(let j=i+1;j<ts.length;j++){const a=ts[i],b=ts[j];if(Math.hypot(a.x-b.x,a.y-b.y)>900)continue;const g=edgeGap(a,b,false),gc=edgeGap(a,b,true);
+    if(gc<0&&g<0)out.push({lvl:'bad',msg:`${nm(a)} y ${nm(b)} se enciman`,ids:[a.id,b.id]});
+    else if(g<120)out.push({lvl:'bad',msg:`${nm(a)} y ${nm(b)} están muy juntas: ${cm(g)} entre mesas. No pasan meseros con las sillas ocupadas.`,ids:[a.id,b.id]});
+    else if(g<150)out.push({lvl:'warn',msg:`${nm(a)} y ${nm(b)}: ${cm(g)} entre mesas. Lo recomendado es 1.50 m.`,ids:[a.id,b.id]})}
+  for(const t of ts)for(const z of zs){const g=edgeGap(t,z,true);if(g<0)out.push({lvl:'bad',msg:`${nm(t)} queda encima de ${(z.label||DEFS[z.t].name).toLowerCase()}`,ids:[t.id,z.id]});else if(z.t==='pista'&&g<40)out.push({lvl:'warn',msg:`${nm(t)} queda pegada a la pista (${cm(g)}). Las sillas estorban al bailar.`,ids:[t.id,z.id]})}
+  for(const e of P.items.filter(i=>i.t==='entrada'))for(const t of ts){const b=bounds(t),d=Math.hypot(t.x-e.x,t.y-e.y)-(DEFS[t.t].kind==='round'?b.x1:Math.max(b.x1,b.y1));if(d<150)out.push({lvl:'warn',msg:`${nm(t)} tapa el paso de la entrada (${cm(d)}). Deja al menos 1.50 m libres.`,ids:[t.id,e.id]})}
+  const rb=roomBox();for(const it of P.items){if(it.t==='texto')continue;const w=worldBox(it);if(w.x0<rb.x0-5||w.y0<rb.y0-5||w.x1>rb.x1+5||w.y1>rb.y1+5)out.push({lvl:'warn',msg:`${nm(it)} sale del salón`,ids:[it.id]})}
+  const seats=ts.filter(t=>!DEFS[t.t].cocktail).reduce((s,t)=>s+(+t.seats||0),0),g=+P.event.guests||0;
+  if(g&&seats<g)out.push({lvl:'bad',msg:`Faltan ${g-seats} lugares: hay ${seats} sillas en mesas para ${g} invitados.`,ids:[]});
+  else if(g&&seats>g*1.15)out.push({lvl:'info',msg:`Sobran ${seats-g} lugares (${seats} sillas para ${g} invitados). Podrías quitar alguna mesa.`,ids:[]});
+  const seen={};for(const t of ts){if(!t.label)continue;if(seen[t.label])out.push({lvl:'warn',msg:`Hay dos mesas con el nombre "${t.label}"`,ids:[seen[t.label],t.id]});else seen[t.label]=t.id}
+  REV={list:out,at:Date.now()};dirty=true;return out}
+function showReview(list,quiet){if(!quiet)showTab('venue');const el=$('#revList');if(!el)return;const bad=list.filter(x=>x.lvl==='bad').length,warn=list.filter(x=>x.lvl==='warn').length;
+  el.innerHTML=`<p style="margin:8px 0">${!list.length?'<span class="pill">Todo en orden</span> No encontré problemas.':`${bad?`<span class="pill warn">${bad} por corregir</span> `:''}${warn?`<span class="pill" style="background:color-mix(in srgb,var(--gold) 22%,transparent)">${warn} por revisar</span>`:''}`}</p>
+   <div class="revl">${list.map((x,i)=>`<button type="button" class="revi ${x.lvl}" data-ri="${i}"><span class="dot"></span><span>${esc(x.msg)}</span></button>`).join('')}</div>${list.length?'<p class="note">Toca un aviso para ir a esa mesa. Los avisos se marcan en el plano.</p>':''}`;
+  el.querySelectorAll('[data-ri]').forEach(b=>b.onclick=()=>{const x=list[+b.dataset.ri],it=P.items.find(i=>i.id===x.ids[0]);if(!it)return;const r=cv.getBoundingClientRect();view.z=Math.max(view.z,.6);view.x=it.x-r.width/2/view.z;view.y=it.y-r.height/2/view.z;select(it.id);showTab('venue');dirty=true})
+  if(!quiet)setTimeout(()=>{const s=$('#secRev');if(s)s.scrollIntoView({behavior:'smooth',block:'start'})},60)}
+function drawReview(c,z){if(!REV||!REV.list.length)return;for(const x of REV.list){if(!x.ids.length)continue;const col=x.lvl==='bad'?'rgba(200,50,50,.9)':'rgba(214,150,30,.9)';const its=x.ids.map(id=>P.items.find(i=>i.id===id)).filter(Boolean);
+  c.save();c.strokeStyle=col;c.lineWidth=3/z;c.setLineDash([8/z,5/z]);for(const it of its.slice(0,1).concat(its.slice(1).filter(i=>TBL.has(DEFS[i.t].kind)))){const b=bounds(it),r=Math.max(b.x1-b.x0,b.y1-b.y0)/2+10;c.beginPath();c.arc(it.x,it.y,r,0,7);c.stroke()}
+  if(its.length>1&&TBL.has(DEFS[its[1].t].kind)){c.setLineDash([]);c.beginPath();c.moveTo(its[0].x,its[0].y);c.lineTo(its[1].x,its[1].y);c.stroke()}c.restore()}}
+
+/* Ordenar automáticamente */
+function autoArrange(){const ts=P.items.filter(i=>{const d=DEFS[i.t];return TBL.has(d.kind)&&!d.oneSide&&!d.cocktail&&d.kind!=='serp'});if(ts.length<2){toast('Necesito al menos 2 mesas para ordenar.');return}
+  const ext=it=>{const w=worldBox(it);return {w:w.x1-w.x0,h:w.y1-w.y0}},AISLE=90;
+  const hs=ts.map(t=>ext(t).h).sort((a,b)=>a-b),tol=hs[hs.length>>1]*.6;const sorted=ts.slice().sort((a,b)=>a.y-b.y);const rows=[];
+  for(const t of sorted){const r=rows[rows.length-1];if(r&&Math.abs(t.y-r.y)<=tol){r.items.push(t);r.y=r.items.reduce((s,i)=>s+i.y,0)/r.items.length}else rows.push({y:t.y,items:[t]})}
+  const y0mean=rows.reduce((s,r)=>s+r.y,0)/rows.length;for(let k=0;k<rows.length;k++){const r=rows[k];r.h=Math.max(...r.items.map(i=>ext(i).h));if(k){const p=rows[k-1];r.y=Math.max(r.y,p.y+p.h/2+r.h/2+AISLE)}}
+  {const dy=y0mean-rows.reduce((s,r)=>s+r.y,0)/rows.length,rb=roomBox();let sh=dy;const top=rows[0].y-rows[0].h/2+sh,bot=rows[rows.length-1].y+rows[rows.length-1].h/2+sh;if(bot>rb.y1)sh-=Math.min(bot-rb.y1,top-rb.y0);else if(top<rb.y0)sh+=Math.min(rb.y0-top,rb.y1-bot);rows.forEach(r=>r.y+=sh)}
+  for(let k=0;k<rows.length;k++){const r=rows[k];
+    const its=r.items.sort((a,b)=>a.x-b.x);const rot=its.filter(i=>DEFS[i.t].kind!=='round').map(i=>i.r);const common=rot.length?rot.sort((a,b)=>rot.filter(v=>v===a).length-rot.filter(v=>v===b).length).pop():null;
+    const segs=[[its[0]]];for(let i=1;i<its.length;i++){const a=its[i-1],b=its[i],need=ext(a).w/2+ext(b).w/2+AISLE;if(b.x-a.x>need*2.2)segs.push([b]);else segs[segs.length-1].push(b)}
+    for(const sg of segs){if(common!=null)sg.forEach(i=>{if(DEFS[i.t].kind!=='round')i.r=common});const wmax=Math.max(...sg.map(i=>ext(i).w)),minP=wmax+AISLE;const x0=sg[0].x,x1=sg[sg.length-1].x,n=sg.length;
+      const pitch=n>1?Math.max(minP,(x1-x0)/(n-1)):0,cx=(x0+x1)/2;sg.forEach((it,i)=>{it.x=snap(cx+(i-(n-1)/2)*pitch);it.y=snap(r.y)})}}
+  sel=null;commit();const rv=review();showReview(rv);toast(`Ordené ${ts.length} mesas en ${rows.length} fila${rows.length>1?'s':''}. Si no te gusta, toca deshacer ↶.`)}
 
 /* ---------- Exportar ---------- */
 let dl=null;

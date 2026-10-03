@@ -1,0 +1,5 @@
+{
+  "name": "montaje-memories",
+  "private": true,
+  "engines": { "node": ">=18" }
+}
