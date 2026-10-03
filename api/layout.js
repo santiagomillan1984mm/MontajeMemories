@@ -3,42 +3,55 @@
 //   ANTHROPIC_API_KEY  = clave de Anthropic (sk-ant-…)
 //   MONTAJE_CODIGO     = código que pide la app la primera vez (para que nadie más gaste tu saldo)
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
-const TIPOS = ['mesa_redonda','mesa_ovalada','mesa_rectangular','mesa_cuadrada','mesa_serpentina','mesa_novios','mesa_honor','periquera','pista','escenario','dj','barra','pastel','postres','regalos','bienvenida','photobooth','lounge','arco','entrada','banos','cocina','columna','muro','planta','pantalla','sillas_ceremonia','otro'];
+const FORMAS = ['rectangular', 'redonda', 'cuadrada', 'ovalada', 'serpentina', 'periquera'];
+const ZONAS = ['pista','escenario','dj','barra','pastel','postres','regalos','bienvenida','photobooth','lounge','arco','entrada','banos','cocina','columna','muro','planta','pantalla','sillas_ceremonia','otro'];
+const PT = { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: '[x, y] en porcentaje de la imagen, 0 a 100' };
 
 const TOOL = {
   name: 'registrar_layout',
-  description: 'Registra los elementos de un layout de evento visto desde arriba.',
+  description: 'Registra las mesas y los elementos de un layout de evento visto desde arriba.',
   input_schema: {
     type: 'object',
     properties: {
-      salon: { type: 'object', description: 'Contorno del salón o área del evento, en fracciones de la imagen (0 a 1). Si hay cotas o medidas escritas, ponlas en metros.', properties: {
+      salon: { type: 'object', description: 'Rectángulo del área del evento en porcentaje (0 a 100) y medidas en metros si están escritas.', properties: {
         x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' },
         ancho_m: { type: ['number', 'null'] }, largo_m: { type: ['number', 'null'] } } },
-      elementos: { type: 'array', items: { type: 'object', properties: {
-        tipo: { type: 'string', enum: TIPOS },
-        cx: { type: 'number', description: 'Centro horizontal, fracción del ancho de la imagen (0 izquierda, 1 derecha)' },
-        cy: { type: 'number', description: 'Centro vertical, fracción del alto de la imagen (0 arriba, 1 abajo)' },
-        w: { type: 'number', description: 'Ancho de la mesa o elemento SIN sillas, fracción del ancho de la imagen' },
-        h: { type: 'number', description: 'Alto de la mesa o elemento SIN sillas, fracción del alto de la imagen' },
-        rotacion: { type: 'number', description: 'Grados, 0 si está horizontal' },
-        sillas: { type: ['integer', 'null'], description: 'Número de sillas dibujadas alrededor' },
-        etiqueta: { type: ['string', 'null'], description: 'Número o nombre escrito en la mesa' } }, required: ['tipo', 'cx', 'cy', 'w', 'h'] } },
+      mesas: { type: 'array', description: 'Una entrada por mesa numerada. Si una mesa está hecha de varias mesas unidas con un solo número, es UNA mesa.', items: { type: 'object', properties: {
+        forma: { type: 'string', enum: FORMAS },
+        etiqueta: { type: ['string', 'null'], description: 'Número o nombre escrito en la mesa' },
+        principal: { type: 'boolean', description: 'true si es mesa de novios o de honor' },
+        centro: PT,
+        extremo_1: { ...PT, description: 'Para mesas alargadas: centro de uno de los lados cortos (cabecera), en porcentaje' },
+        extremo_2: { ...PT, description: 'Centro de la otra cabecera' },
+        ancho_pct: { type: ['number', 'null'], description: 'Ancho de la mesa (lado corto, sin sillas) en porcentaje del ANCHO de la imagen' },
+        diametro_pct: { type: ['number', 'null'], description: 'Solo mesas redondas: diámetro sin sillas en porcentaje del ANCHO de la imagen' },
+        sillas_lado_1: { type: 'integer', description: 'Sillas a lo largo de un lado largo' },
+        sillas_lado_2: { type: 'integer', description: 'Sillas a lo largo del otro lado largo' },
+        sillas_cabeceras: { type: 'integer', description: 'Sillas en las cabeceras (0, 1 o 2)' },
+        sillas_total: { type: 'integer' },
+        punto_sillas: { ...PT, description: 'Si solo hay sillas de un lado: posición de una de esas sillas' }
+      }, required: ['forma', 'centro', 'sillas_total'] } },
+      elementos: { type: 'array', description: 'Pista, escenario, barra, DJ, entrada, etc. Rectángulo que ocupan, en porcentaje.', items: { type: 'object', properties: {
+        tipo: { type: 'string', enum: ZONAS }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' }, etiqueta: { type: ['string', 'null'] } }, required: ['tipo', 'x0', 'y0', 'x1', 'y1'] } },
       invitados: { type: ['integer', 'null'], description: 'Total de invitados si aparece escrito' },
-      dudosos: { type: 'array', items: { type: 'string' } },
-      nota: { type: ['string', 'null'] }
+      dudosos: { type: 'array', items: { type: 'string' } }
     },
-    required: ['elementos', 'dudosos']
+    required: ['mesas', 'elementos', 'dudosos']
   }
 };
 
-const PROMPT = `Eres asistente de una wedding planner en México. La imagen es un layout o plano de montaje de un evento visto desde arriba (render, plano de computadora, PDF o boceto).
-Registra CADA mesa y cada elemento importante (pista, barra, DJ, escenario, entrada, mesa de pastel, lounge, photobooth, columnas, muros sueltos) con su centro y tamaño como fracción de la imagen completa.
-Reglas:
-- Cuenta todas las mesas, aunque sean muchas. No inventes elementos que no estén dibujados.
-- El tamaño w/h es el de la mesa sin las sillas.
-- Mesa larga (más de 3 veces su ancho) con sillas de los dos lados: mesa_rectangular. Mesa larga frente a todos con sillas de un solo lado: mesa_novios (2 a 4 lugares) o mesa_honor.
-- Si hay medidas escritas del salón (cotas), ponlas en salon.ancho_m / largo_m.
-- Pon en "dudosos" lo que no se distinga bien.`;
+const PROMPT = `Eres asistente de una wedding planner en México. La imagen es un layout de montaje de un evento visto desde arriba. Encima le dibujé una cuadrícula roja tenue con números de 0 a 100 en los bordes: úsala para dar posiciones en porcentaje (x de izquierda a derecha, y de arriba abajo).
+
+Registra con la herramienta:
+1. Cada MESA numerada. Si una mesa está formada por varias mesas pegadas que comparten un solo número, regístrala como UNA sola mesa con su largo total.
+   - Para mesas alargadas da extremo_1 y extremo_2: el centro de cada cabecera (lado corto). Así queda claro hacia dónde está girada. Si la mesa está en diagonal, los extremos también.
+   - Cuenta las sillas dibujadas: sillas_lado_1 y sillas_lado_2 en los lados largos, sillas_cabeceras en las puntas, y sillas_total. Cuenta con cuidado, silla por silla. Si hay números junto a las sillas, úsalos para confirmar.
+   - Si una mesa tiene sillas de un solo lado, da punto_sillas con la posición de una de esas sillas.
+   - ancho_pct es el lado corto de la mesa sin sillas, en porcentaje del ancho de la imagen.
+2. Los ELEMENTOS que no son mesas (pista, escenario, barra, DJ, entrada, lounge, etc.) con el rectángulo que ocupan. No registres paredes, jardines, albercas ni la arquitectura del lugar.
+3. Si hay medidas escritas del salón, ponlas en salon. Si dice cuántas personas son, ponlo en invitados.
+No inventes nada que no esté dibujado. Pon en dudosos lo que no se distinga bien.
+Responde únicamente llamando a la herramienta registrar_layout.`;
 
 async function readJson(req) {
   if (req.body && typeof req.body === 'object') return req.body;
@@ -58,8 +71,8 @@ module.exports = async (req, res) => {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 8000, tools: [TOOL], tool_choice: { type: 'auto' },
-      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text: PROMPT + '\n\nResponde únicamente llamando a la herramienta registrar_layout.' }] }] })
+    body: JSON.stringify({ model: MODEL, max_tokens: 12000, tools: [TOOL], tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text: PROMPT }] }] })
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
@@ -70,5 +83,5 @@ module.exports = async (req, res) => {
   let out = (j.content || []).find(b => b.type === 'tool_use');
   if (!out) { const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'); const m = txt.match(/\{[\s\S]*\}/); if (m) { try { out = { input: JSON.parse(m[0]) }; } catch (e) {} } }
   if (!out) return send(502, { error: 'La IA no devolvió datos. Intenta de nuevo.' });
-  return send(200, { data: out.input });
+  return send(200, { data: out.input, v: 2 });
 };
