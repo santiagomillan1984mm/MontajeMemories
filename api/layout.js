@@ -58,8 +58,8 @@ module.exports = async (req, res) => {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 8000, tools: [TOOL], tool_choice: { type: 'tool', name: TOOL.name },
-      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text: PROMPT }] }] })
+    body: JSON.stringify({ model: MODEL, max_tokens: 8000, tools: [TOOL], tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text: PROMPT + '\n\nResponde únicamente llamando a la herramienta registrar_layout.' }] }] })
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
@@ -67,7 +67,8 @@ module.exports = async (req, res) => {
     if (/credit|billing/i.test(msg)) return send(402, { error: 'Tu cuenta de Anthropic no tiene saldo. Agrega crédito en console.anthropic.com.' });
     return send(502, { error: 'La IA no pudo leer el layout: ' + msg });
   }
-  const out = (j.content || []).find(b => b.type === 'tool_use');
+  let out = (j.content || []).find(b => b.type === 'tool_use');
+  if (!out) { const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'); const m = txt.match(/\{[\s\S]*\}/); if (m) { try { out = { input: JSON.parse(m[0]) }; } catch (e) {} } }
   if (!out) return send(502, { error: 'La IA no devolvió datos. Intenta de nuevo.' });
   return send(200, { data: out.input });
 };
