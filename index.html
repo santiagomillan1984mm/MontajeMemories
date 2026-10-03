@@ -122,6 +122,7 @@ details[open] summary::after{content:'−'}
 .method{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;background:var(--surface-2)}
 .method>div{min-width:0}.method b{display:block;font-size:13.5px}.method span{display:block;font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:2px}.method .btn{flex:none}
 .nomeas{margin-top:16px;border-top:1px dashed var(--line);padding-top:12px}.nomeas .eyebrow{color:var(--gold)}
+.spin{flex:none;width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .tlq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 10px;display:grid;gap:6px}.tlq legend{font-weight:600;font-size:13px;padding:0 6px}
 .trcard{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:12px 14px}
 .revl{display:grid;gap:6px}
@@ -1136,14 +1137,16 @@ async function fileToImg(f,max){max=max||2400;let src;
   const im=new Image();await new Promise((r,j)=>{im.onload=r;im.onerror=j;im.src=src});return {src,w:im.width,h:im.height,im}}
 function smallB64(img,max){const s=Math.min(1,max/Math.max(img.w,img.h)),c=document.createElement('canvas');c.width=Math.round(img.w*s);c.height=Math.round(img.h*s);c.getContext('2d').drawImage(img.im,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.9).split(',')[1]}
 function askCode(wrong){return new Promise(res=>{const sh=gmodal(`<h2>Código de acceso</h2><p class="note">${wrong?'<b style="color:var(--danger)">Código incorrecto.</b> ':''}Escribe el código que pusiste en Vercel (MONTAJE_CODIGO). Solo se pide una vez en este navegador.</p><div class="field" style="margin-top:12px"><input type="text" id="cdIn" autocomplete="off"></div><div class="actions"><button class="btn" id="cdX">Cancelar</button><button class="btn primary" id="cdOk">Continuar</button></div>`);
-  const i=sh.querySelector('#cdIn');i.focus();sh.querySelector('#cdX').onclick=()=>{gclose();res('')};const ok=()=>{const v=i.value.trim();if(v){res(v)}};sh.querySelector('#cdOk').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok()}})}
+  const i=sh.querySelector('#cdIn');i.focus();sh.querySelector('#cdX').onclick=()=>{gclose();res('')};const ok=()=>{const v=i.value.trim();if(v){waitModal('Verificando el código…');res(v)}};sh.querySelector('#cdOk').onclick=ok;i.onkeydown=e=>{if(e.key==='Enter')ok()}})}
 async function callLayout(b64,onWait){let code='';try{code=LS.get('montaje.codigo')||''}catch(e){}
-  for(let i=0;i<3;i++){let r;onWait&&onWait();try{r=await fetch('/api/layout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({b64,mime:'image/jpeg',codigo:code})})}catch(e){throw new Error('La lectura con IA funciona en la app publicada (montaje en Vercel), no en esta vista previa.')}
-    if(r.status===404)throw new Error('La lectura con IA funciona en la app publicada (montaje en Vercel), no en esta vista previa.');
-    const j=await r.json().catch(()=>({error:'Respuesta no válida ('+r.status+')'}));
+  for(let i=0;i<3;i++){let r;onWait&&onWait();const ac=new AbortController(),tt=setTimeout(()=>ac.abort(),95000);try{r=await fetch('/api/layout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({b64,mime:'image/jpeg',codigo:code}),signal:ac.signal})}catch(e){clearTimeout(tt);throw new Error(e.name==='AbortError'?'La IA tardó demasiado. Intenta otra vez o con una imagen más sencilla.':(location.hostname.endsWith('vercel.app')?'No hay conexión con el servidor. Revisa tu internet.':'La lectura con IA funciona en la app publicada (montaje en Vercel), no en esta vista previa.'))}clearTimeout(tt);
+    if(r.status===404)throw new Error('No encontré la función de IA en el servidor. Revisa que el último deploy de Vercel diga Ready.');
+    const j=await r.json().catch(()=>({error:r.status===504?'La IA tardó demasiado en responder. Intenta otra vez.':'El servidor respondió con un error ('+r.status+'). Intenta otra vez.'}));
     if(r.status===401&&j.needCode){code=await askCode(i>0||!!(LS.get('montaje.codigo')));if(!code)throw new Error('Se necesita el código para usar la IA.');LS.del('montaje.codigo');continue}
     if(!r.ok)throw new Error(j.error||('Error '+r.status));LS.set('montaje.codigo',code);return j.data}
   throw new Error('Código incorrecto.')}
+function waitModal(t){const sh=gmodal(`<h2>Transcribir layout</h2><div style="display:flex;gap:12px;align-items:center;margin:18px 0"><span class="spin" aria-hidden="true"></span><p style="margin:0" aria-live="polite">${esc(t)}</p></div><p class="note">No cierres esta ventana.</p>`);$('#gModal').dataset.busy='1';return sh}
+function errModal(msg,retry){const sh=gmodal(`<h2>No se pudo transcribir</h2><p style="margin:12px 0" role="alert">${esc(msg)}</p><div class="actions"><button class="btn" id="erX">Cerrar</button>${retry?'<button class="btn primary" id="erR">Volver a intentar</button>':''}</div>`);sh.querySelector('#erX').onclick=gclose;if(retry)sh.querySelector('#erR').onclick=retry}
 function startTranscribe(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';inp.onchange=()=>{const f=inp.files[0];if(f)transcribe(f)};inp.click()}
 async function transcribe(f){let img;try{toast('Preparando el layout…');img=await fileToImg(f)}catch(e){toast('No se pudo abrir ese archivo. Prueba con PDF, JPG o PNG.');return}
   const has=P.items.length;
@@ -1166,8 +1169,8 @@ async function transcribe(f){let img;try{toast('Preparando el layout…');img=aw
   sh.querySelector('#tlGo').onclick=async()=>{const bg=sh.querySelector('#tlBg').checked,mode=(sh.querySelector('[name="tlM"]:checked')||{}).value||'rep',scale=sh.querySelector('[name="tlS"]:checked').value,dw=+sh.querySelector('#tlW').value,dh=+sh.querySelector('#tlH').value;
     if(scale==='medidas'&&!(dw>0&&dh>0)){sh.querySelector('#tlMsg').textContent='Escribe el ancho y el largo del área en metros.';return}
     const go=sh.querySelector('#tlGo'),msg=sh.querySelector('#tlMsg');go.disabled=true;$('#gModal').dataset.busy='1';
-    try{const data=await callLayout(smallB64(img,1568),()=>{msg.textContent='La IA está leyendo el layout… puede tardar hasta un minuto.'});gclose();applyLayout(data,img,{bg,mode,scale,dw,dh})}
-    catch(e){if($('#gModal').hidden)transcribe(f);else{delete $('#gModal').dataset.busy;go.disabled=false;msg.textContent=e.message}}}}
+    try{const data=await callLayout(smallB64(img,1568),()=>waitModal('La IA está leyendo el layout. Puede tardar hasta un minuto…'));gclose();applyLayout(data,img,{bg,mode,scale,dw,dh})}
+    catch(e){errModal(e.message,()=>transcribe(f))}}}
 function applyLayout(data,img,opt){const els=(data.elementos||[]).filter(e=>isFinite(e.cx)&&isFinite(e.cy));if(!els.length){toast('La IA no encontró mesas en esa imagen.');return}
   const W=img.w,H=img.h,s=data.salon&&data.salon.x1>data.salon.x0&&data.salon.y1>data.salon.y0?data.salon:null;let cpp=null,how='';
   if(s&&s.ancho_m>0){cpp=s.ancho_m*100/((s.x1-s.x0)*W);how='con las medidas escritas en el plano'}
