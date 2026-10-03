@@ -74,7 +74,7 @@ button{cursor:pointer}
 .t3help{position:absolute;left:12px;bottom:12px;margin:0;background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:12px;max-width:min(380px,calc(100% - 200px));opacity:.92}
 .t3load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-weight:600;background:var(--stage);color:var(--ink)}
 @media (max-width:820px){.t3help{display:none}.t3bar{left:100px}}
-.hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 32px);font-size:13px}
+.hint{position:absolute;left:50%;top:58px;z-index:3;transform:translateX(-50%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 32px);font-size:13px}
 .hint input{width:80px;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:var(--surface-2)}
 
 .panel{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
@@ -119,6 +119,9 @@ details summary::-webkit-details-marker{display:none}
 details summary::after{content:'+';font-family:var(--font-body);color:var(--muted);font-size:20px;line-height:1}
 details[open] summary::after{content:'−'}
 .secb{padding-bottom:16px}
+.method{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;background:var(--surface-2)}
+.method>div{min-width:0}.method b{display:block;font-size:13.5px}.method span{display:block;font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:2px}.method .btn{flex:none}
+.nomeas{margin-top:16px;border-top:1px dashed var(--line);padding-top:12px}.nomeas .eyebrow{color:var(--gold)}
 .swname{font-size:12px;color:var(--muted);font-weight:500}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 hr{border:0;border-top:1px solid var(--line);margin:16px 0}
@@ -725,6 +728,8 @@ function render(){
   const W=cv.width/dpr,H=cv.height/dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=css('--stage')||'#E1E6DF';ctx.fillRect(0,0,W,H);
   ctx.setTransform(dpr*view.z,0,0,dpr*view.z,-view.x*view.z*dpr,-view.y*view.z*dpr);
   drawScene(ctx,view.z,{});
+  if(mode==='refscale'&&REF){const g=css('--gold')||'#A9843F',k=DEFS[REF.it.t].kind;ctx.save();ctx.globalAlpha=.82;drawItem(ctx,REF.it,view.z,{});ctx.restore();
+    ctx.save();ctx.translate(REF.it.x,REF.it.y);ctx.rotate(REF.it.r*Math.PI/180);ctx.strokeStyle=g;ctx.lineWidth=2.5/view.z;ctx.setLineDash([7/view.z,5/view.z]);if(TBL.has(k))linenPath(ctx,REF.it,k,0);else{ctx.beginPath();ctx.rect(-24,-24,48,48)}ctx.stroke();ctx.restore()}
   const s=P.items.find(i=>i.id===sel);
   if(s){const b=bounds(s);ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.r*Math.PI/180);ctx.strokeStyle=css('--gold')||'#A9843F';ctx.lineWidth=2/view.z;ctx.setLineDash([6/view.z,4/view.z]);
     ctx.strokeRect(b.x0-6/view.z,b.y0-6/view.z,b.x1-b.x0+12/view.z,b.y1-b.y0+12/view.z);ctx.setLineDash([]);
@@ -732,7 +737,8 @@ function render(){
     ctx.fillStyle='#FFFFFF';ctx.beginPath();ctx.arc(0,hy,8/view.z,0,7);ctx.fill();ctx.stroke();ctx.restore()}
   ctx.setTransform(dpr,0,0,dpr,0,0);
   if(mpts.length){const g=css('--gold')||'#A9843F';ctx.strokeStyle=g;ctx.fillStyle=g;ctx.lineWidth=2;const sp=mpts.map(p=>w2s(p.x,p.y));
-    ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);if(sp[1])ctx.lineTo(sp[1].x,sp[1].y);ctx.stroke();for(const p of sp){ctx.beginPath();ctx.arc(p.x,p.y,5,0,7);ctx.fill()}
+    if(mode==='caparea'&&sp[1]){const x0=Math.min(sp[0].x,sp[1].x),y0=Math.min(sp[0].y,sp[1].y),ww=Math.abs(sp[1].x-sp[0].x),hh=Math.abs(sp[1].y-sp[0].y);ctx.fillStyle='rgba(169,132,63,.16)';ctx.fillRect(x0,y0,ww,hh);ctx.setLineDash([6,4]);ctx.strokeRect(x0,y0,ww,hh);ctx.setLineDash([]);ctx.fillStyle=g}
+    else{ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);if(sp[1])ctx.lineTo(sp[1].x,sp[1].y);ctx.stroke()}for(const p of sp){ctx.beginPath();ctx.arc(p.x,p.y,5,0,7);ctx.fill()}
     if(sp[1]&&mode==='measure'){const d=Math.hypot(mpts[1].x-mpts[0].x,mpts[1].y-mpts[0].y);const lbl=(d/100).toFixed(2)+' m';ctx.font='600 13px IBM Plex Mono, monospace';const tw=ctx.measureText(lbl).width+14;const mx=(sp[0].x+sp[1].x)/2,my=(sp[0].y+sp[1].y)/2-16;
       ctx.fillStyle='#1E2A24';rr(ctx,mx-tw/2,my-12,tw,24,6);ctx.fill();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(lbl,mx,my)}}
   drawScaleBar(ctx,20,H-24,view.z,css('--ink')||'#1E2A24',css('--surface')||'#fff');
@@ -750,6 +756,7 @@ cv.addEventListener('pointerdown',e=>{
   cv.setPointerCapture(e.pointerId);const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;ptrs.set(e.pointerId,{x:sx,y:sy});
   if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2};drag=null;return}
   const w=s2w(sx,sy);
+  if(mode==='refscale'&&REF){const g=REF.it,p=toLocal(g,w.x,w.y),b=bounds(g);if(p.x>=b.x0&&p.x<=b.x1&&p.y>=b.y0&&p.y<=b.y1)drag={type:'ref',dx:w.x-g.x,dy:w.y-g.y};else drag={type:'pan',sx,sy,vx:view.x,vy:view.y};return}
   if(mode){if(mpts.length>=2)mpts=[];mpts.push(w);dirty=true;updateHint();return}
   const s=P.items.find(i=>i.id===sel);
   if(s){const b=bounds(s),hp=toWorldPt(s,0,b.y0-6/view.z-28/view.z),hs=w2s(hp.x,hp.y);if(Math.hypot(hs.x-sx,hs.y-sy)<18){drag={type:'rot',it:s,moved:false};return}}
@@ -764,6 +771,7 @@ cv.addEventListener('pointermove',e=>{
   if(!drag)return;const w=s2w(sx,sy);
   if(drag.type==='pan'){view.x=drag.vx-(sx-drag.sx)/view.z;view.y=drag.vy-(sy-drag.sy)/view.z;dirty=true}
   else if(drag.type==='move'){if(!drag.moved&&Math.hypot(sx-drag.sx,sy-drag.sy)<3)return;drag.moved=true;drag.it.x=snap(w.x-drag.dx);drag.it.y=snap(w.y-drag.dy);dirty=true}
+  else if(drag.type==='ref'){REF.it.x=w.x-drag.dx;REF.it.y=w.y-drag.dy;REF.u=REF.it.x/P.venue.cmPerPx;REF.v=REF.it.y/P.venue.cmPerPx;dirty=true}
   else if(drag.type==='rot'){let a=Math.atan2(w.y-drag.it.y,w.x-drag.it.x)*180/Math.PI+90;a=e.shiftKey?Math.round(a):Math.round(a/5)*5;drag.it.r=((a%360)+360)%360;drag.moved=true;dirty=true;syncRot()}
 });
 function endPtr(e){ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(drag&&drag.moved){commit();if(drag.type==='move')renderEdit()}if(!ptrs.size)drag=null}
@@ -788,16 +796,45 @@ document.addEventListener('keydown',e=>{
   else if(e.key.startsWith('Arrow')){e.preventDefault();const st=e.shiftKey?50:5;if(e.key==='ArrowLeft')s.x-=st;if(e.key==='ArrowRight')s.x+=st;if(e.key==='ArrowUp')s.y-=st;if(e.key==='ArrowDown')s.y+=st;commit()}
 });
 
-function setMode(m){mode=m;mpts=[];$('#measure').classList.toggle('on',m==='measure');updateHint();dirty=true}
-function updateHint(){const h=$('#hint');
-  if(mode==='measure'){h.hidden=false;h.innerHTML=mpts.length<2?'<span>Toca dos puntos para medir la distancia.</span><button class="btn sm" id="hx">Listo</button>':'<span>Toca otra vez para medir de nuevo.</span><button class="btn sm" id="hx">Listo</button>'}
+let CAL=null,REF=null;
+const CALOBJ=[['','Escribir la medida'],['0.90','Puerta sencilla · 0.90 m'],['1.80','Puerta doble · 1.80 m'],['1.50','Mesa redonda dibujada · Ø1.50 m'],['1.80m','Mesa redonda dibujada · Ø1.80 m'],['2.40','Tablón rectangular · 2.40 m'],['2.50','Cajón de estacionamiento · 2.50 m de ancho'],['5.00','Cajón de estacionamiento · 5.00 m de largo'],['0.30','Escalón · 0.30 m'],['1.20','Pasillo de servicio · 1.20 m'],['23.77','Cancha de tenis · 23.77 m de largo'],['28.00','Cancha de básquetbol · 28 m de largo'],['20.00','Cancha de fútbol rápido · 20 m de ancho']];
+const REFT=[['r150','Mesa redonda Ø1.50 m'],['r180','Mesa redonda Ø1.80 m'],['r120','Mesa redonda Ø1.20 m'],['t240','Tablón 2.40 × 0.76 m'],['imp','Imperial 4.80 × 1.10 m'],['ch','Silla']];
+function snapCal(){CAL={base:P.venue.cmPerPx,pos:P.items.map(i=>[i.x,i.y]),ids:P.items.map(i=>i.id)}}
+function scaleTo(c,move){const f=c/CAL.base;P.venue.cmPerPx=c;P.items.forEach(it=>{const k=CAL.ids.indexOf(it.id);if(k<0)return;const o=CAL.pos[k];it.x=move?o[0]*f:o[0];it.y=move?o[1]*f:o[1]})}
+function restoreCal(){if(CAL)scaleTo(CAL.base,false)}
+function refItem(t){const P0={r150:['redonda',{w:150,h:150,seats:10}],r180:['redonda',{w:180,h:180,seats:12}],r120:['redonda',{w:120,h:120,seats:8}],t240:['rectangular',{w:240,h:76,seats:8}],imp:['imperial',{w:480,h:110,seats:18}],ch:['silla',{}]}[t]||['redonda',{}];
+  const it=makeItem(P0[0],0,0,Object.assign({label:''},P0[1]));if(it.place)it.place.on=false;if(it.center)it.center.type='ninguno';return it}
+function setMode(m){
+  if((mode==='refscale'||mode==='calib'||mode==='caparea')&&m!==mode&&CAL&&!CAL.done){restoreCal();dirty=true}
+  mode=m;mpts=[];CAL=null;REF=null;
+  if(m==='calib'||m==='caparea'||m==='refscale')snapCal();
+  if(m==='refscale'){const r=cv.getBoundingClientRect(),c=s2w(r.width/2,r.height/2),it=refItem('r150');it.x=c.x;it.y=c.y;REF={t:'r150',it,u:c.x/P.venue.cmPerPx,v:c.y/P.venue.cmPerPx,s:0};if(sel)select(null)}
+  $('#measure').classList.toggle('on',m==='measure');updateHint();dirty=true}
+function finishCal(label,move){CAL.done=true;P.venue.calib=label;setMode(null);commit();renderVenue();fit();toast('Escala lista. Puedes comprobarla con la regla.')}
+function moveChk(){return P.items.length?'<label class="check"><input type="checkbox" id="calmv" checked> Ajustar también lo que ya acomodé</label>':''}
+function updateHint(){const h=$('#hint');const btnX=t=>`<button class="btn sm" id="hx">${t}</button>`;
+  if(mode==='measure'){h.hidden=false;h.innerHTML=(mpts.length<2?'<span>Toca dos puntos para medir la distancia.</span>':'<span>Toca otra vez para medir de nuevo.</span>')+btnX('Listo')}
   else if(mode==='calib'){h.hidden=false;
-    if(mpts.length<2)h.innerHTML='<span>Toca los dos extremos de una medida que conozcas del plano (por ejemplo, un muro).</span><button class="btn sm" id="hx">Cancelar</button>';
-    else h.innerHTML='<label for="calv">Distancia real</label><input id="calv" type="number" step="0.01" min="0.1" placeholder="m"><span>m</span><button class="btn sm primary" id="calok">Aplicar escala</button><button class="btn sm" id="hx">Cancelar</button>'}
+    if(mpts.length<2)h.innerHTML='<span>Toca los dos extremos de algo cuya medida conozcas: un muro acotado, una puerta, una mesa dibujada, un cajón de estacionamiento.</span>'+btnX('Cancelar');
+    else h.innerHTML=`<label for="calpre">Es</label><select id="calpre" style="width:auto">${opts(CALOBJ,CAL&&CAL.pre||'')}</select><input id="calv" type="number" step="0.01" min="0.05" placeholder="m" style="width:80px" value="${CAL&&CAL.pre?parseFloat(CAL.pre):''}"><span>m</span>${moveChk()}<button class="btn sm primary" id="calok">Aplicar escala</button>${btnX('Cancelar')}`}
+  else if(mode==='caparea'){h.hidden=false;
+    if(mpts.length<2)h.innerHTML='<span>Toca dos esquinas opuestas del salón, solo el área donde van las mesas.</span>'+btnX('Cancelar');
+    else h.innerHTML=`<label for="capn">Capacidad</label><input id="capn" type="number" min="10" value="${P.event.guests||100}" style="width:76px"><span>personas en</span><select id="capk" style="width:auto"><option value="1.3">banquete con mesas redondas</option><option value="1.1">banquete con mesas imperiales</option><option value="0.9">cóctel de pie</option><option value="0.8">ceremonia o auditorio</option></select>${moveChk()}<button class="btn sm primary" id="capok">Calcular escala</button>${btnX('Cancelar')}`}
+  else if(mode==='refscale'){h.hidden=false;
+    h.innerHTML=`<span>Arrastra la mesa encima de una mesa dibujada y ajusta hasta que coincidan.</span><select id="reft" style="width:auto">${opts(REFT,REF.t)}</select><button class="btn sm" id="rfm" aria-label="Plano más chico">−</button><input type="range" id="rfs" min="-200" max="200" step="1" value="${REF.s}" style="width:160px" aria-label="Tamaño del plano"><button class="btn sm" id="rfp" aria-label="Plano más grande">+</button>${moveChk()}<button class="btn sm primary" id="rfok">Listo</button>${btnX('Cancelar')}`}
   else h.hidden=true;
   const hx=$('#hx');if(hx)hx.onclick=()=>setMode(null);
-  const ok=$('#calok');if(ok){$('#calv').focus();ok.onclick=()=>{const m=parseFloat($('#calv').value);if(!(m>0)){toast('Escribe la distancia en metros.');return}
-    const d=Math.hypot(mpts[1].x-mpts[0].x,mpts[1].y-mpts[0].y);if(d<1)return;P.venue.cmPerPx*=(m*100)/d;setMode(null);commit();fit();renderVenue();toast('Escala ajustada. Mide algo conocido para comprobar.')}}
+  const mv=()=>{const c=$('#calmv');return c?c.checked:false};
+  const pre=$('#calpre');if(pre){pre.onchange=()=>{CAL.pre=pre.value;if(pre.value)$('#calv').value=parseFloat(pre.value)}}
+  const ok=$('#calok');if(ok){if(!$('#calv').value)$('#calv').focus();ok.onclick=()=>{const m=parseFloat($('#calv').value);if(!(m>0)){toast('Escribe la medida en metros.');return}
+    const d=Math.hypot(mpts[1].x-mpts[0].x,mpts[1].y-mpts[0].y);if(d<1)return;const lbl=$('#calpre').value?nm(CALOBJ,$('#calpre').value).split(' · ')[0]:'medida de '+m+' m';scaleTo(P.venue.cmPerPx*(m*100)/d,mv());finishCal(lbl)}}
+  const cok=$('#capok');if(cok)cok.onclick=()=>{const n=+$('#capn').value,k=+$('#capk').value;if(!(n>0)){toast('Escribe la capacidad.');return}
+    const a=Math.abs((mpts[1].x-mpts[0].x)*(mpts[1].y-mpts[0].y))/1e4;if(a<=0)return;const f=Math.sqrt(n*k/a);scaleTo(P.venue.cmPerPx*f,mv());finishCal('por capacidad, aproximada')};
+  const rs=$('#rfs');if(rs){const apply=v=>{REF.s=v;const r=cv.getBoundingClientRect();const scr=w2s(REF.it.x,REF.it.y);const c=CAL.base*Math.pow(2,v/100);scaleTo(c,mv());REF.it.x=REF.u*c;REF.it.y=REF.v*c;view.x=REF.it.x-scr.x/view.z;view.y=REF.it.y-scr.y/view.z;dirty=true};
+    rs.oninput=()=>apply(+rs.value);$('#rfm').onclick=()=>{rs.value=+rs.value-2;apply(+rs.value)};$('#rfp').onclick=()=>{rs.value=+rs.value+2;apply(+rs.value)};
+    $('#reft').onchange=e=>{const it=refItem(e.target.value);it.x=REF.it.x;it.y=REF.it.y;REF.it=it;REF.t=e.target.value;dirty=true};
+    const cm=$('#calmv');if(cm)cm.onchange=()=>apply(+rs.value);
+    $('#rfok').onclick=()=>finishCal('comparando con '+nm(REFT,REF.t).replace(/^./,ch=>ch.toLowerCase()))}
 }
 
 /* ---------- Historial y guardado ---------- */
@@ -964,7 +1001,7 @@ function linenSize(it){if(it.linen.fabric==='ninguno')return 'sin mantel';const 
 
 /* Salón */
 function renderVenue(){
-  const v=P.venue,e=P.event;const el=$('#tab-venue');
+  const v=P.venue,e=P.event;const el=$('#tab-venue');const hasImg=v.mode==='image'&&!!v.img;
   el.innerHTML=`<section><h3>Datos del evento</h3>
   <div class="field"><label for="vC">Evento o novios</label><input type="text" id="vC" data-e="couple" value="${esc(e.couple)}" placeholder="Boda de Ana y Luis"></div>
   <div class="two"><div class="field"><label for="vD">Fecha</label><input type="date" id="vD" data-e="date" value="${esc(e.date)}"></div>
@@ -972,17 +1009,27 @@ function renderVenue(){
   <div class="field"><label for="vP">Lugar</label><input type="text" id="vP" data-e="place" value="${esc(e.place)}" placeholder="Hacienda, jardín, salón…"></div>
   <div class="field"><label for="vW">Wedding planner</label><input type="text" id="vW" data-e="planner" value="${esc(e.planner)}" placeholder="Tu nombre o marca"></div></section>
   <section><h3>Plano del lugar</h3>
-  <p class="note" style="margin-bottom:10px">Sube el plano que te manda el lugar (foto, imagen o PDF). Después calibra la escala tocando dos puntos de una medida conocida.</p>
-  <div class="actions"><label class="btn primary" for="vFile" style="cursor:pointer">Subir plano</label><input id="vFile" type="file" accept="image/*,application/pdf" hidden>
-  ${v.mode==='image'&&v.img?'<button class="btn" id="vCal">Calibrar escala</button><button class="btn danger" id="vRm">Quitar plano</button>':''}</div>
-  ${v.mode==='image'&&v.img?`<div class="field" style="margin-top:12px"><label for="vOp">Opacidad del plano</label><input id="vOp" type="range" min="0.15" max="1" step="0.05" value="${v.opacity}"></div><p class="note">Tamaño a escala: ${m2(v.imgW*v.cmPerPx)} × ${m2(v.imgH*v.cmPerPx)} m</p>`:''}
+  <p class="note" style="margin-bottom:10px">Sube el plano que te manda el lugar o uno que bajaste de internet: foto, imagen o PDF.</p>
+  <div class="actions"><label class="btn primary" for="vFile" style="cursor:pointer">${hasImg?'Cambiar plano':'Subir plano'}</label><input id="vFile" type="file" accept="image/*,application/pdf" hidden>${hasImg?'<button class="btn danger" id="vRm">Quitar plano</button>':''}</div>
+  ${hasImg?`<div class="field" style="margin-top:12px"><label for="vOp">Opacidad del plano</label><input id="vOp" type="range" min="0.15" max="1" step="0.05" value="${v.opacity}"></div>`:''}
   </section>
+  ${hasImg?`<section id="secEscala"><h3>Escala del plano</h3>
+  <p style="margin:0 0 6px"><span class="pill ${v.calib?'':'warn'}">${v.calib?'Calibrada · '+esc(v.calib):'Sin calibrar · las medidas son aproximadas'}</span></p>
+  <p class="note" style="margin:0 0 4px">Tamaño a escala: ${m2(v.imgW*v.cmPerPx)} × ${m2(v.imgH*v.cmPerPx)} m</p>
+  <div class="method"><div><b>Tengo una medida del plano</b><span>El plano trae una cota o sabes cuánto mide un muro. Toca sus dos extremos y escribe la medida.</span></div><button class="btn sm" id="mCal">Usar</button></div>
+  <div class="nomeas"><p class="eyebrow">¿No tienes las medidas del lugar?</p>
+  <div class="method"><div><b>Comparar con una mesa</b><span>Pon una mesa real encima de una mesa dibujada en el plano y ajusta el tamaño hasta que coincidan. La forma más fácil.</span></div><button class="btn sm primary" id="mRef">Usar</button></div>
+  <div class="method"><div><b>Con una puerta u objeto conocido</b><span>Toca los extremos de una puerta, un cajón de estacionamiento o un escalón y elige qué es. La app pone la medida.</span></div><button class="btn sm" id="mObj">Usar</button></div>
+  <div class="method"><div><b>Por capacidad del lugar</b><span>Si sabes para cuántas personas es el salón, marca su área y la app calcula el tamaño aproximado.</span></div><button class="btn sm" id="mCap">Usar</button></div>
+  <p class="note">Para jardines y haciendas: en Google Maps, vista satélite, haz clic derecho → Medir distancia. Con esa medida usa "Tengo una medida del plano".</p></div>
+  </section>`:''}
   ${v.mode==='image'&&v.img?'':`<section><h3>Salón en blanco</h3><p class="note" style="margin-bottom:10px">Si no tienes plano, dibuja el salón con sus medidas y agrega muros, columnas y entradas desde Agregar.</p>
   <div class="two"><div class="field"><label for="vRW">Ancho (m)</label><input id="vRW" type="number" step="0.5" min="2" value="${v.w/100}"></div><div class="field"><label for="vRH">Largo (m)</label><input id="vRH" type="number" step="0.5" min="2" value="${v.h/100}"></div></div></section>`}
   <section><h3>Ayudas</h3><label class="check"><input type="checkbox" id="vGrid" ${P.settings.grid?'checked':''}> Cuadrícula de 1 m</label><label class="check" style="margin-top:6px"><input type="checkbox" id="vSnap" ${P.settings.snap?'checked':''}> Ajustar posición cada 10 cm</label></section>`;
   el.querySelectorAll('[data-e]').forEach(i=>{i.addEventListener('input',()=>{P.event[i.dataset.e]=i.type==='number'?(+i.value||0):i.value;save()});i.addEventListener('change',commit)});
   $('#vFile').onchange=ev=>{const f=ev.target.files[0];if(f)loadPlan(f);ev.target.value=''};
-  const cal=$('#vCal');if(cal)cal.onclick=()=>{setMode('calib');if(window.innerWidth<=820)toast('Toca dos puntos del plano.')};
+  const go=(m,pre)=>{if(T3.on)close3D();setMode(m);if(pre&&CAL){CAL.pre=pre}if(window.innerWidth<=820)toast(m==='refscale'?'Arrastra la mesa sobre una mesa del plano.':'Toca dos puntos del plano.')};
+  const b1=$('#mCal');if(b1){b1.onclick=()=>go('calib');$('#mRef').onclick=()=>go('refscale');$('#mObj').onclick=()=>go('calib','0.90');$('#mCap').onclick=()=>go('caparea')}
   const rm=$('#vRm');if(rm)rm.onclick=()=>{P.venue.mode='blank';P.venue.img=null;commit();renderVenue();fit()};
   const op=$('#vOp');if(op){op.oninput=()=>{P.venue.opacity=+op.value;dirty=true};op.onchange=commit}
   const rw=$('#vRW'),rh=$('#vRH');if(rw){const f=()=>{P.venue.w=Math.max(200,Math.round((+rw.value||2)*100));P.venue.h=Math.max(200,Math.round((+rh.value||2)*100));dirty=true};rw.oninput=f;rh.oninput=f;rw.onchange=rh.onchange=()=>{commit();fit()}}
@@ -998,8 +1045,8 @@ async function loadPlan(f){
     else{const url=URL.createObjectURL(f);const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});const sc=Math.min(1,2400/Math.max(im.width,im.height));
       const c=document.createElement('canvas');c.width=Math.round(im.width*sc);c.height=Math.round(im.height*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);src=c.toDataURL('image/jpeg',.85)}
     const im=new Image();await new Promise(r=>{im.onload=r;im.src=src});imgCache[src]=im;
-    Object.assign(P.venue,{mode:'image',img:src,imgW:im.width,imgH:im.height,cmPerPx:3000/im.width,opacity:1});
-    commit();renderVenue();fit();setMode('calib');toast('Plano cargado. Ahora toca dos puntos de una medida conocida para calibrar la escala.')
+    Object.assign(P.venue,{mode:'image',img:src,imgW:im.width,imgH:im.height,cmPerPx:3000/im.width,opacity:1,calib:''});
+    commit();showTab('venue');renderVenue();fit();setTimeout(()=>{const se=$('#secEscala');if(se)se.scrollIntoView({behavior:'smooth',block:'start'})},80);toast('Plano cargado. Ahora elige cómo sacar la escala.')
   }catch(err){toast('No se pudo abrir ese archivo. Prueba con una imagen JPG o PNG del plano.')}
 }
 
