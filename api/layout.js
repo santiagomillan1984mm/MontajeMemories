@@ -4,7 +4,8 @@
 //   MONTAJE_CODIGO     = código que pide la app la primera vez (para que nadie más gaste tu saldo)
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 const FORMAS = ['rectangular', 'redonda', 'cuadrada', 'ovalada', 'serpentina', 'periquera'];
-const ZONAS = ['pista','escenario','dj','barra','pastel','postres','regalos','bienvenida','photobooth','lounge','arco','entrada','banos','cocina','columna','muro','planta','pantalla','sillas_ceremonia','otro'];
+const ZONAS = ['pista','escenario','dj','barra','pastel','postres','regalos','bienvenida','photobooth','lounge','arco','entrada','banos','cocina','columna','muro','planta','pantalla','sillas_ceremonia','arbol','palmera','arbusto','seto','fuente','pergola','carpa','guirnalda','farola','sombrilla','fogata','otro'];
+const PISOS = ['pasto','arena','adoquin','deck','marmolpiso','concreto','grava','piedra','tierra','agua','mar'];
 const PT = { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2, description: '[x, y] en porcentaje de la imagen, 0 a 100' };
 
 const TOOL = {
@@ -33,6 +34,9 @@ const TOOL = {
       }, required: ['forma', 'centro', 'sillas_total'] } },
       elementos: { type: 'array', description: 'Pista, escenario, barra, DJ, entrada, etc. Rectángulo que ocupan, en porcentaje.', items: { type: 'object', properties: {
         tipo: { type: 'string', enum: ZONAS }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' }, etiqueta: { type: ['string', 'null'] } }, required: ['tipo', 'x0', 'y0', 'x1', 'y1'] } },
+      zonas_piso: { type: 'array', description: 'Áreas de piso distintas dibujadas o coloreadas: jardín o pasto, alberca o agua, playa o arena, deck, adoquín, etc. Rectángulo que ocupan en porcentaje.', items: { type: 'object', properties: {
+        material: { type: 'string', enum: PISOS }, forma: { type: 'string', enum: ['rectangular', 'redondeada', 'ovalada'] }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' } }, required: ['material', 'x0', 'y0', 'x1', 'y1'] } },
+      piso_general: { type: ['string', 'null'], enum: [...PISOS, null], description: 'Material del área principal del evento si se distingue (por ejemplo, un jardín = pasto). null si es un salón o no se sabe.' },
       invitados: { type: ['integer', 'null'], description: 'Total de invitados si aparece escrito' },
       dudosos: { type: 'array', items: { type: 'string' } }
     },
@@ -48,7 +52,8 @@ Registra con la herramienta:
    - Cuenta las sillas dibujadas: sillas_lado_1 y sillas_lado_2 en los lados largos, sillas_cabeceras en las puntas, y sillas_total. Cuenta con cuidado, silla por silla. Si hay números junto a las sillas, úsalos para confirmar.
    - Si una mesa tiene sillas de un solo lado, da punto_sillas con la posición de una de esas sillas.
    - ancho_pct es el lado corto de la mesa sin sillas, en porcentaje del ancho de la imagen.
-2. Los ELEMENTOS que no son mesas (pista, escenario, barra, DJ, entrada, lounge, etc.) con el rectángulo que ocupan. No registres paredes, jardines, albercas ni la arquitectura del lugar.
+2. Los ELEMENTOS que no son mesas (pista, escenario, barra, DJ, entrada, lounge, árboles, palmeras, setos, fuentes, pérgolas, carpas, guirnaldas de luces, farolas, sombrillas, fogatas) con el rectángulo que ocupan. No registres paredes ni la arquitectura del lugar.
+   Las ÁREAS DE PISO (jardín o pasto, alberca, playa, deck, adoquín) van en zonas_piso con su rectángulo y forma. Una alberca o área de agua aunque sea de forma irregular: usa el rectángulo que la contiene y forma ovalada o redondeada. Si todo el evento es en jardín, pon piso_general = pasto.
 3. Si hay medidas escritas del salón, ponlas en salon. Si dice cuántas personas son, ponlo en invitados.
 No inventes nada que no esté dibujado. Pon en dudosos lo que no se distinga bien.
 Responde únicamente llamando a la herramienta registrar_layout.`;
