@@ -58,6 +58,41 @@ Registra con la herramienta:
 No inventes nada que no esté dibujado. Pon en dudosos lo que no se distinga bien.
 Responde únicamente llamando a la herramienta registrar_layout.`;
 
+// ---- Estilo de mesa y ambiente del lugar desde una foto ----
+const HEX = { type: ['string', 'null'], description: 'Color en hexadecimal, por ejemplo #E8D9C4' };
+const en = (list, extra) => ({ type: 'string', enum: [...new Set([...(Array.isArray(list) ? list.map(String).slice(0, 80) : []), ...(extra || [])])] });
+function estiloTool(c) {
+  c = c || {};
+  return { name: 'registrar_estilo', description: 'Registra el estilo de la mesa de la foto usando las opciones del catálogo.', input_schema: { type: 'object', properties: {
+    mantel: { type: 'object', properties: { tela: en(c.fabrics, ['ninguno']), color: HEX, caida: { type: 'string', enum: ['piso', 'corta'] } } },
+    superficie: { ...en(c.surfaces), description: 'Solo si la mesa no tiene mantel: material de la mesa' },
+    sobremantel: { type: 'object', properties: { tela: en(c.overlays, ['']), color: HEX } },
+    camino: { type: 'object', properties: { estilo: en(c.runners, ['']), color: HEX } },
+    silla: { type: 'object', properties: { modelo: en(c.chairs), color: HEX, cojin: HEX, decoracion: en(c.decos, ['']), color_decoracion: HEX } },
+    lugar: { type: 'object', properties: { plato_base: en(c.chargers, ['']), servilleta_color: HEX, doblez: en(c.folds), cubiertos: en(c.cutlery), cristaleria: en(c.glass), copas: { type: 'integer' } } },
+    centro: { type: 'object', properties: { tipo: en(c.centers), flor: en(c.flowers), colores_flores: { type: 'array', items: { type: 'string' }, description: '2 a 5 colores hex de las flores' }, florero: en(c.vases) } },
+    aproximaciones: { type: 'array', items: { type: 'string' }, description: 'Cosas de la foto que no existen igual en el catálogo y qué opción parecida elegiste' },
+    resumen: { type: 'string', description: 'Una frase con el estilo de la mesa' }
+  }, required: ['resumen'] } };
+}
+const ESTILO_PROMPT = `Eres asistente de una wedding planner en México. La foto muestra una mesa montada para un evento. Describe su estilo eligiendo SIEMPRE de las opciones del catálogo de la herramienta (son las únicas que existen en la app).
+- Colores: da el hex que más se parezca al color real de la foto.
+- Si algo de la foto no está igual en el catálogo, elige lo más parecido y explícalo en "aproximaciones" (por ejemplo: "La servilleta tiene doblez de rosa; puse abanico").
+- Si algo no se ve en la foto, omite ese campo.
+Responde únicamente llamando a la herramienta registrar_estilo.`;
+const PISO_OPC = ['', 'pasto', 'arena', 'adoquin', 'deck', 'marmolpiso', 'concreto', 'grava', 'piedra', 'tierra', 'alfombra'];
+const LUGAR_TOOL = { name: 'registrar_ambiente', description: 'Registra el ambiente del lugar de la foto.', input_schema: { type: 'object', properties: {
+  piso_general: { type: 'string', enum: PISO_OPC, description: 'Piso donde irían las mesas' },
+  alrededor: { type: 'string', enum: ['', 'pasto', 'arena', 'concreto', 'tierra'] },
+  hay_mar: { type: 'boolean' },
+  vegetacion: { type: 'object', properties: { palmeras: { type: 'integer' }, arboles: { type: 'integer' }, olivos: { type: 'integer' }, arbustos: { type: 'integer' }, setos: { type: 'boolean' } } },
+  luces: { type: 'object', properties: { guirnaldas: { type: 'boolean' }, farolas: { type: 'boolean' }, antorchas: { type: 'boolean' }, fogata: { type: 'boolean' } } },
+  estructuras: { type: 'object', properties: { pergola: { type: 'boolean' }, carpa: { type: 'boolean' }, sombrillas: { type: 'boolean' }, alberca: { type: 'boolean' } } },
+  momento: { type: 'string', enum: ['dia', 'atardecer', 'noche'], description: 'Momento del día de la foto' },
+  resumen: { type: 'string' }
+}, required: ['resumen'] } };
+const LUGAR_PROMPT = `Eres asistente de una wedding planner en México. La foto muestra un lugar para eventos (jardín, playa, hacienda, terraza o salón). Describe su ambiente: tipo de piso, lo que hay alrededor, si se ve el mar, la vegetación (cuenta aproximadamente palmeras y árboles visibles, máximo 12), las luces y las estructuras. Solo lo que se vea en la foto. Responde únicamente llamando a la herramienta registrar_ambiente.`;
+
 async function readJson(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   const chunks = []; for await (const ch of req) chunks.push(ch);
@@ -73,20 +108,23 @@ module.exports = async (req, res) => {
   if (String(body.codigo || '').trim() !== String(code).trim()) return send(401, { error: 'Código incorrecto.', needCode: true });
   if (!body.b64 || !/^image\/(jpeg|png|webp)$/.test(body.mime || '')) return send(400, { error: 'No llegó la imagen del layout.' });
 
+  const modo = body.modo === 'estilo' ? 'estilo' : body.modo === 'lugar' ? 'lugar' : 'layout';
+  const tool = modo === 'estilo' ? estiloTool(body.catalogo) : modo === 'lugar' ? LUGAR_TOOL : TOOL;
+  const text = modo === 'estilo' ? ESTILO_PROMPT : modo === 'lugar' ? LUGAR_PROMPT : PROMPT;
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 12000, tools: [TOOL], tool_choice: { type: 'auto' },
-      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text: PROMPT }] }] })
+    body: JSON.stringify({ model: MODEL, max_tokens: modo === 'layout' ? 12000 : 4000, tools: [tool], tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text }] }] })
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
     const msg = j?.error?.message || ('Error ' + r.status);
     if (/credit|billing/i.test(msg)) return send(402, { error: 'Tu cuenta de Anthropic no tiene saldo. Agrega crédito en console.anthropic.com.' });
-    return send(502, { error: 'La IA no pudo leer el layout: ' + msg });
+    return send(502, { error: 'La IA no pudo leer la imagen: ' + msg });
   }
   let out = (j.content || []).find(b => b.type === 'tool_use');
   if (!out) { const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'); const m = txt.match(/\{[\s\S]*\}/); if (m) { try { out = { input: JSON.parse(m[0]) }; } catch (e) {} } }
   if (!out) return send(502, { error: 'La IA no devolvió datos. Intenta de nuevo.' });
-  return send(200, { data: out.input, v: 2 });
+  return send(200, { data: out.input, v: 3, modo });
 };
