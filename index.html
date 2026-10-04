@@ -743,7 +743,7 @@ function drawScene(c,z,opt){
   drawVenueFloor(c,v,rb);
   if((opt.export?opt.grid:P.settings.grid)){c.strokeStyle='rgba(60,90,75,.13)';c.lineWidth=Math.max(.6,1/z);c.beginPath();
     for(let x=0;x<=rb.x1;x+=100){c.moveTo(x,0);c.lineTo(x,rb.y1)}for(let y=0;y<=rb.y1;y+=100){c.moveTo(0,y);c.lineTo(rb.x1,y)}c.stroke()}
-  if(v.mode!=='image'||!v.img){const out=['pasto','arena','tierra','grava','piedra','deck','adoquin'].includes(v.floor);c.strokeStyle=out?'rgba(53,58,55,.35)':'#353A37';c.lineWidth=out?4:16;c.strokeRect(-8,-8,v.w+16,v.h+16);
+  if(v.mode!=='image'||!v.img){const vk=venueKind(v);c.save();c.strokeStyle=vk==='aire'?'rgba(53,58,55,.35)':'#353A37';c.lineWidth=vk==='salon'?16:vk==='barda'?10:4;if(vk==='terraza'){c.setLineDash([30,14]);c.lineWidth=6}c.strokeRect(-8,-8,v.w+16,v.h+16);c.restore();
     txt(c,m2(v.w)+' m',v.w/2,-40,Math.max(18,12/z),'#5D6A62','IBM Plex Mono, monospace',500);
     c.save();c.translate(-40,v.h/2);c.rotate(-Math.PI/2);txt(c,m2(v.h)+' m',0,0,Math.max(18,12/z),'#5D6A62','IBM Plex Mono, monospace',500);c.restore()}
   for(const it of sorted())drawItem(c,it,z,opt);
@@ -1070,6 +1070,7 @@ function renderVenue(){
   <div class="two"><div class="field"><label for="vRW">Ancho (m)</label><input id="vRW" type="number" step="0.5" min="2" value="${v.w/100}"></div><div class="field"><label for="vRH">Largo (m)</label><input id="vRH" type="number" step="0.5" min="2" value="${v.h/100}"></div></div></section>`}
   <section><h3>Piso y ambiente</h3><p class="note" style="margin-bottom:10px">Dale color al plano y al 3D. Para zonas de pasto, alberca o deck, usa Agregar → Pisos, naturaleza y luces.</p><button class="btn primary" id="vAmb" style="margin-bottom:12px">Ambiente desde foto del lugar</button>
   <div class="field"><label for="vFl">Piso del lugar</label><select id="vFl"><option value="">${hasImg?'Como viene en el plano':'Blanco'}</option>${FLOORMATS.filter(f=>!['agua','mar'].includes(f[0])).map(([k,n])=>`<option value="${k}" ${v.floor===k?'selected':''}>${n}</option>`).join('')}</select></div>
+  <div class="field"><label for="vKind">Tipo de lugar</label><select id="vKind">${KINDS.map(([k,n])=>`<option value="${k}" ${(v.kind||'')===k?'selected':''}>${k?n:n+' · '+(KINDS.find(x=>x[0]===venueKind(Object.assign({},v,{kind:''})))||['',''])[1].split(' (')[0]}</option>`).join('')}</select></div>
   <div class="two"><div class="field"><label for="vGr">Alrededor</label><select id="vGr">${GROUNDS.map(([k,n])=>`<option value="${k}" ${(v.ground||'')===k?'selected':''}>${n}</option>`).join('')}</select></div><div class="field"><label for="vSea">Vista al mar</label><select id="vSea">${SEAS.map(([k,n])=>`<option value="${k}" ${(v.sea||'')===k?'selected':''}>${n}</option>`).join('')}</select></div></div></section>
   <section><h3>¿Ya tienes un layout hecho?</h3><p class="note" style="margin-bottom:10px">Sube un render, plano o PDF con las mesas ya dibujadas. La IA las cuenta y las coloca para que las edites, las veas en 3D y las mejores.</p><button class="btn primary" id="vTr">Transcribir layout con IA</button></section>
   <section id="secRev"><h3>Revisar y mejorar</h3><p class="note" style="margin-bottom:10px">Revisa que haya 1.50 m entre mesas, pasillos libres, nada encima de la pista y lugares suficientes.</p><div class="actions"><button class="btn" id="vRev">Revisar distribución</button><button class="btn" id="vArr">Ordenar automáticamente</button>${REV?'<button class="btn" id="vRevX">Ocultar avisos</button>':''}</div><div id="revList"></div></section>
@@ -1083,7 +1084,7 @@ function renderVenue(){
   const rw=$('#vRW'),rh=$('#vRH');if(rw){const f=()=>{P.venue.w=Math.max(200,Math.round((+rw.value||2)*100));P.venue.h=Math.max(200,Math.round((+rh.value||2)*100));dirty=true};rw.oninput=f;rh.oninput=f;rw.onchange=rh.onchange=()=>{commit();fit()}}
   const vo=$('#vOrig');if(vo)vo.onchange=()=>{const v2=P.venue;v2.showOrig=vo.checked;v2.img=vo.checked?v2.imgOrig:v2.imgClean;ensureImg(v2.img);commit();dirty=true};
   $('#vAmb').onclick=ambientFromPhoto;
-  $('#vFl').onchange=e2=>{P.venue.floor=e2.target.value;commit()};$('#vGr').onchange=e2=>{P.venue.ground=e2.target.value;commit()};$('#vSea').onchange=e2=>{P.venue.sea=e2.target.value;commit()};
+  $('#vFl').onchange=e2=>{P.venue.floor=e2.target.value;commit();renderVenue()};$('#vKind').onchange=e2=>{P.venue.kind=e2.target.value;commit()};$('#vGr').onchange=e2=>{P.venue.ground=e2.target.value;commit()};$('#vSea').onchange=e2=>{P.venue.sea=e2.target.value;commit()};
   $('#vTr').onclick=startTranscribe;$('#vRev').onclick=()=>{showReview(review())};$('#vArr').onclick=autoArrange;const rx=$('#vRevX');if(rx)rx.onclick=()=>{REV=null;dirty=true;renderVenue()};if(REV)showReview(REV.list,true);
   $('#vGrid').onchange=e2=>{P.settings.grid=e2.target.checked;commit()};$('#vSnap').onchange=e2=>{P.settings.snap=e2.target.checked;commit()};
 }
@@ -1165,6 +1166,8 @@ function renderProj(){
 
 /* ---------- Ambiente: pisos, naturaleza, luces y estructuras ---------- */
 const FLOORMATS=[['pasto','Pasto'],['arena','Arena'],['adoquin','Adoquín'],['deck','Deck de madera'],['marmolpiso','Mármol'],['concreto','Concreto pulido'],['grava','Grava'],['piedra','Piedra / laja'],['tierra','Tierra'],['agua','Agua (alberca)'],['mar','Mar'],['alfombra','Alfombra (color)']];
+const KINDS=[['','Automático'],['salon','Salón cerrado (paredes)'],['aire','Al aire libre (sin paredes)'],['terraza','Terraza con barandal'],['barda','Jardín con barda baja']];
+function venueKind(v){if(v.kind)return v.kind;if(['pasto','arena','tierra','grava','piedra','deck','adoquin'].includes(v.floor))return 'aire';return v.mode==='image'&&v.img?'aire':'salon'}
 const GROUNDS=[['','Neutro'],['pasto','Pasto'],['arena','Arena'],['concreto','Concreto'],['tierra','Tierra']];
 const SEAS=[['','Sin mar'],['arriba','Mar arriba del plano'],['abajo','Mar abajo del plano'],['izquierda','Mar a la izquierda'],['derecha','Mar a la derecha']];
 function floorTex(x,kind,col,T){const R=seeded('f'+kind+col);const fill=f=>{x.fillStyle=f;x.fillRect(0,0,T,T)};
@@ -1277,6 +1280,7 @@ async function ambientFromPhoto(){const f=await pickPhoto();if(!f)return;let img
   let a;try{a=await callLayout(photoURL(img,1400).split(',')[1],()=>waitModal('La IA está viendo la foto del lugar…'),{modo:'lugar'})}catch(e){errModal(e.message,ambientFromPhoto);return}
   const v=a.vegetacion||{},l=a.luces||{},e=a.estructuras||{},ref=photoURL(img,520,.8);const num=(id,lbl,val)=>`<label class="check numc"><span>${lbl}</span><input type="number" id="${id}" min="0" max="20" value="${clamp(val|0,0,20)}"></label>`;const chk=(id,lbl,val)=>`<label class="check"><input type="checkbox" id="${id}" ${val?'checked':''}> ${lbl}</label>`;
   const sh=gmodal(`<h2>Ambiente desde foto</h2><p class="note">${esc(a.resumen||'')}</p><div class="phrev"><img src="${ref}" alt="Foto del lugar"><div>
+   <div class="field"><label for="amK">Tipo de lugar</label><select id="amK">${KINDS.map(([k,n])=>`<option value="${k}" ${(a.tipo_lugar||'')===k?'selected':''}>${n}</option>`).join('')}</select></div>
    <div class="field"><label for="amF">Piso del lugar</label><select id="amF"><option value="">Como viene en el plano</option>${FLOORMATS.filter(x=>!['agua','mar'].includes(x[0])).map(([k,n])=>`<option value="${k}" ${a.piso_general===k?'selected':''}>${n}</option>`).join('')}</select></div>
    <div class="two"><div class="field"><label for="amG">Alrededor</label><select id="amG">${GROUNDS.map(([k,n])=>`<option value="${k}" ${(a.alrededor||'')===k?'selected':''}>${n}</option>`).join('')}</select></div>
    <div class="field"><label for="amS">Mar</label><select id="amS">${SEAS.map(([k,n])=>`<option value="${k}" ${(a.hay_mar?(P.venue.sea||'arriba'):'')===k?'selected':''}>${n}</option>`).join('')}</select></div></div></div></div>
@@ -1287,10 +1291,10 @@ async function ambientFromPhoto(){const f=await pickPhoto();if(!f)return;let img
    <div class="actions"><button class="btn" id="amX">Cancelar</button><button class="btn primary" id="amOk">Aplicar ambiente</button></div>`);
   sh.classList.add('wide2');sh.querySelector('#amX').onclick=gclose;
   sh.querySelector('#amOk').onclick=()=>{const q=id=>sh.querySelector('#'+id),n=id=>clamp(+q(id).value||0,0,20),b=id=>q(id).checked;
-    const o={floor:q('amF').value,ground:q('amG').value,sea:q('amS').value,pal:n('amPal'),arb:n('amArb'),oli:n('amOli'),bu:n('amBu'),set:b('amSet'),gui:b('amGui'),far:b('amFar'),ant:b('amAnt'),fog:b('amFog'),per:b('amPer'),car:b('amCar'),som:b('amSom'),alb:b('amAlb'),rep:b('amRep'),ref};
+    const o={kind:q('amK').value,floor:q('amF').value,ground:q('amG').value,sea:q('amS').value,pal:n('amPal'),arb:n('amArb'),oli:n('amOli'),bu:n('amBu'),set:b('amSet'),gui:b('amGui'),far:b('amFar'),ant:b('amAnt'),fog:b('amFog'),per:b('amPer'),car:b('amCar'),som:b('amSom'),alb:b('amAlb'),rep:b('amRep'),ref};
     gclose();const k=applyAmbient(o);if(a.momento==='atardecer'){T3.amb=2;T3.night=false}else if(a.momento==='noche'){T3.amb=1;T3.night=true}else if(a.momento==='dia'){T3.amb=0;T3.night=false}if(T3.on){sync3DUI();rebuild3D()}
     toast(`Ambiente aplicado: ${k} elementos.${a.momento&&a.momento!=='dia'?' El 3D queda en '+(a.momento==='noche'?'noche':'atardecer')+'.':''}`)}}
-function applyAmbient(o){const v=P.venue,rb=roomBox();v.floor=o.floor;v.ground=o.ground;v.sea=o.sea;v.refPhoto=o.ref;
+function applyAmbient(o){const v=P.venue,rb=roomBox();v.floor=o.floor;v.ground=o.ground;v.sea=o.sea;v.refPhoto=o.ref;if(o.kind!==undefined)v.kind=o.kind;
   if(o.rep)P.items=P.items.filter(i=>i.auto!=='amb');
   const tabs=P.items.filter(i=>TBL.has(DEFS[i.t].kind));let TB;if(tabs.length){TB={x0:1e9,y0:1e9,x1:-1e9,y1:-1e9};for(const t of tabs){const w=worldBox(t);TB.x0=Math.min(TB.x0,w.x0);TB.y0=Math.min(TB.y0,w.y0);TB.x1=Math.max(TB.x1,w.x1);TB.y1=Math.max(TB.y1,w.y1)}}else TB={x0:rb.x1*.3,y0:rb.y1*.3,x1:rb.x1*.7,y1:rb.y1*.7};
   let n=0;const add=(k,x,y,over)=>{const it=makeItem(k,Math.round(x/5)*5,Math.round(y/5)*5,over);it.auto='amb';P.items.push(it);n++;return it};
@@ -1730,8 +1734,11 @@ function buildScene(night,q){
     if(side==='izquierda'){strip(beach,400,-beach/2,RD/2,sm,-.005);strip(far,400,-beach-far/2,RD/2,wm,-.004)}
     if(side==='derecha'){strip(beach,400,RW+beach/2,RD/2,sm,-.005);strip(far,400,RW+beach+far/2,RD/2,wm,-.004)}}
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(RW,RD),floorMat);floor.rotation.x=-Math.PI/2;floor.position.set(RW/2,0,RD/2);floor.receiveShadow=S.shadows;scene.add(floor);S.floor=floor;
-  if(!(v.mode==='image'&&v.img)&&!['pasto','arena','tierra','grava','piedra','deck','adoquin'].includes(v.floor)){const wm=matc('#F4F1EB',.95),th=.18,Hh=3.2;
-    for(const [w,d,x,z,n] of [[RW+th*2,th,RW/2,-th/2,[0,0,-1]],[RW+th*2,th,RW/2,RD+th/2,[0,0,1]],[th,RD,-th/2,RD/2,[-1,0,0]],[th,RD,RW+th/2,RD/2,[1,0,0]]]){const m=box(S,w,Hh,d,x,Hh/2,z,wm);m.userData.n=n;scene.add(m);S.walls.push(m)}}
+  {const vk=venueKind(v);if(vk==='salon'||vk==='barda'){const wm=matc(vk==='barda'?'#E9DFCF':'#F4F1EB',.95),th=vk==='barda'?.25:.18,Hh=vk==='barda'?1.4:3.2;
+    for(const [w,d,x,z,n] of [[RW+th*2,th,RW/2,-th/2,[0,0,-1]],[RW+th*2,th,RW/2,RD+th/2,[0,0,1]],[th,RD,-th/2,RD/2,[-1,0,0]],[th,RD,RW+th/2,RD/2,[1,0,0]]]){const m=box(S,w,Hh,d,x,Hh/2,z,wm);m.userData.n=n;if(vk==='salon')S.walls.push(m);scene.add(m)}}
+   else if(vk==='terraza'){const post=matc('#3E3A36',.5,.4),glass=matc('#D8ECF4',.05,0,{transparent:true,opacity:.22,depthWrite:false}),rail=matc('#5B4634',.6);
+    for(const [len,x,z,rot] of [[RW,RW/2,0,0],[RW,RW/2,RD,0],[RD,0,RD/2,1],[RD,RW,RD/2,1]]){const g=new THREE.Group();g.position.set(x,0,z);if(rot)g.rotation.y=Math.PI/2;
+      const n=Math.max(1,Math.round(len/1.5));for(let i=0;i<=n;i++)g.add(box(S,.06,1.05,.06,-len/2+i*len/n,.525,0,post));g.add(box(S,len,.06,.1,0,1.05,0,rail));const gp=new THREE.Mesh(new THREE.PlaneGeometry(len,.9),glass);gp.position.set(0,.5,0);g.add(gp);scene.add(g)}}}
   for(const it of sorted()){const kd=DEFS[it.t].kind;let o=null;
     if(TBL.has(kd))o=table3D(S,it);
     else if(kd==='chair'){o=chair3D(it.chair,S);o.position.set(it.x*M3,0,it.y*M3);o.rotation.y=-it.r*Math.PI/180}

@@ -82,6 +82,7 @@ const ESTILO_PROMPT = `Eres asistente de una wedding planner en México. La foto
 Responde únicamente llamando a la herramienta registrar_estilo.`;
 const PISO_OPC = ['', 'pasto', 'arena', 'adoquin', 'deck', 'marmolpiso', 'concreto', 'grava', 'piedra', 'tierra', 'alfombra'];
 const LUGAR_TOOL = { name: 'registrar_ambiente', description: 'Registra el ambiente del lugar de la foto.', input_schema: { type: 'object', properties: {
+  tipo_lugar: { type: 'string', enum: ['salon', 'aire', 'terraza', 'barda'], description: 'salon = cerrado con paredes; aire = al aire libre; terraza = con barandal; barda = jardín con muro bajo' },
   piso_general: { type: 'string', enum: PISO_OPC, description: 'Piso donde irían las mesas' },
   alrededor: { type: 'string', enum: ['', 'pasto', 'arena', 'concreto', 'tierra'] },
   hay_mar: { type: 'boolean' },
