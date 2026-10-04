@@ -1020,6 +1020,7 @@ function renderVenue(){
   <section><h3>Plano del lugar</h3>
   <p class="note" style="margin-bottom:10px">Sube el plano que te manda el lugar o uno que bajaste de internet: foto, imagen o PDF.</p>
   <div class="actions"><label class="btn primary" for="vFile" style="cursor:pointer">${hasImg?'Cambiar plano':'Subir plano'}</label><input id="vFile" type="file" accept="image/*,application/pdf" hidden>${hasImg?'<button class="btn danger" id="vRm">Quitar plano</button>':''}</div>
+  ${hasImg&&v.imgOrig?`<label class="check" style="margin-top:12px"><input type="checkbox" id="vOrig" ${v.showOrig?'checked':''}> Mostrar las mesas del dibujo original</label><p class="note">Apágalo para trabajar sin el rastro de las mesas dibujadas.</p>`:''}
   ${hasImg?`<div class="field" style="margin-top:12px"><label for="vOp">Opacidad del plano</label><input id="vOp" type="range" min="0.15" max="1" step="0.05" value="${v.opacity}"></div>`:''}
   </section>
   ${hasImg?`<section id="secEscala"><h3>Escala del plano</h3>
@@ -1041,9 +1042,10 @@ function renderVenue(){
   $('#vFile').onchange=ev=>{const f=ev.target.files[0];if(f)loadPlan(f);ev.target.value=''};
   const go=(m,pre)=>{if(T3.on)close3D();setMode(m);if(pre&&CAL){CAL.pre=pre}if(window.innerWidth<=820)toast(m==='refscale'?'Arrastra la mesa sobre una mesa del plano.':'Toca dos puntos del plano.')};
   const b1=$('#mCal');if(b1){b1.onclick=()=>go('calib');$('#mRef').onclick=()=>go('refscale');$('#mObj').onclick=()=>go('calib','0.90');$('#mCap').onclick=()=>go('caparea')}
-  const rm=$('#vRm');if(rm)rm.onclick=()=>{P.venue.mode='blank';P.venue.img=null;commit();renderVenue();fit()};
+  const rm=$('#vRm');if(rm)rm.onclick=()=>{P.venue.mode='blank';P.venue.img=null;P.venue.imgOrig=null;P.venue.imgClean=null;commit();renderVenue();fit()};
   const op=$('#vOp');if(op){op.oninput=()=>{P.venue.opacity=+op.value;dirty=true};op.onchange=commit}
   const rw=$('#vRW'),rh=$('#vRH');if(rw){const f=()=>{P.venue.w=Math.max(200,Math.round((+rw.value||2)*100));P.venue.h=Math.max(200,Math.round((+rh.value||2)*100));dirty=true};rw.oninput=f;rh.oninput=f;rw.onchange=rh.onchange=()=>{commit();fit()}}
+  const vo=$('#vOrig');if(vo)vo.onchange=()=>{const v2=P.venue;v2.showOrig=vo.checked;v2.img=vo.checked?v2.imgOrig:v2.imgClean;ensureImg(v2.img);commit();dirty=true};
   $('#vTr').onclick=startTranscribe;$('#vRev').onclick=()=>{showReview(review())};$('#vArr').onclick=autoArrange;const rx=$('#vRevX');if(rx)rx.onclick=()=>{REV=null;dirty=true;renderVenue()};if(REV)showReview(REV.list,true);
   $('#vGrid').onchange=e2=>{P.settings.grid=e2.target.checked;commit()};$('#vSnap').onchange=e2=>{P.settings.snap=e2.target.checked;commit()};
 }
@@ -1057,7 +1059,7 @@ async function loadPlan(f){
     else{const url=URL.createObjectURL(f);const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});const sc=Math.min(1,2400/Math.max(im.width,im.height));
       const c=document.createElement('canvas');c.width=Math.round(im.width*sc);c.height=Math.round(im.height*sc);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);src=c.toDataURL('image/jpeg',.85)}
     const im=new Image();await new Promise(r=>{im.onload=r;im.src=src});imgCache[src]=im;
-    Object.assign(P.venue,{mode:'image',img:src,imgW:im.width,imgH:im.height,cmPerPx:3000/im.width,cmPerPxY:null,estimated:false,opacity:1,calib:''});
+    Object.assign(P.venue,{mode:'image',img:src,imgW:im.width,imgH:im.height,cmPerPx:3000/im.width,cmPerPxY:null,estimated:false,imgOrig:null,imgClean:null,showOrig:false,opacity:1,calib:''});
     commit();showTab('venue');renderVenue();fit();setTimeout(()=>{const se=$('#secEscala');if(se)se.scrollIntoView({behavior:'smooth',block:'start'})},80);toast('Plano cargado. Ahora elige cómo sacar la escala.')
   }catch(err){toast('No se pudo abrir ese archivo. Prueba con una imagen JPG o PNG del plano.')}
 }
@@ -1161,7 +1163,8 @@ async function transcribe(f){let img;try{toast('Preparando el layout…');img=aw
     <div class="two" id="tlDims" hidden style="margin:6px 0 4px 24px"><div class="field"><label for="tlW">Ancho (m)</label><input type="number" id="tlW" min="2" step="0.5" placeholder="24"></div><div class="field"><label for="tlH">Largo (m)</label><input type="number" id="tlH" min="2" step="0.5" placeholder="16"></div></div>
     <label class="check"><input type="radio" name="tlS" value="estimar"> No es a escala y no sé las medidas: acomodar con 1.50 m entre mesas</label>
     <p class="note" id="tlHelp" style="margin:4px 0 0">La IA usa las medidas escritas del plano o calcula la escala con el tamaño de las mesas.</p></fieldset>
-   <label class="check"><input type="checkbox" id="tlBg" checked> Usar esta imagen como plano de fondo</label>
+   <label class="check"><input type="checkbox" id="tlBg" checked> Usar esta imagen como plano de fondo (sin las mesas dibujadas)</label>
+   <label class="check" style="margin-top:4px"><input type="checkbox" id="tlNum"> Copiar los números de mesa del layout</label>
    ${has?`<div style="margin-top:8px"><label class="check"><input type="radio" name="tlM" value="rep" checked> Reemplazar lo que ya tengo acomodado (${has} elementos)</label><label class="check" style="margin-top:4px"><input type="radio" name="tlM" value="add"> Agregar a lo que ya tengo</label></div>`:''}
    <p class="note">Usa tu estilo actual de mesa (mantel, sillas, centros). Las posiciones salen aproximadas: revísalas.</p>
    <p class="note" id="tlMsg" aria-live="polite"></p>
@@ -1169,10 +1172,10 @@ async function transcribe(f){let img;try{toast('Preparando el layout…');img=aw
   sh.querySelector('#tlX').onclick=gclose;
   const HELP={escala:'La IA usa las medidas escritas del plano o calcula la escala con el tamaño de las mesas.',medidas:'El croquis se estira al ancho y largo que escribas, aunque esté deformado. Las mesas quedan a tamaño real. Ancho es de izquierda a derecha en la imagen.',estimar:'Se respeta el acomodo del croquis, las mesas van a tamaño real con 1.50 m entre ellas y el fondo se ajusta. Te digo cuánta área se necesita.'};
   sh.querySelectorAll('[name="tlS"]').forEach(r=>r.onchange=()=>{sh.querySelector('#tlDims').hidden=r.value!=='medidas';sh.querySelector('#tlHelp').textContent=HELP[r.value]});
-  sh.querySelector('#tlGo').onclick=async()=>{const bg=sh.querySelector('#tlBg').checked,mode=(sh.querySelector('[name="tlM"]:checked')||{}).value||'rep',scale=sh.querySelector('[name="tlS"]:checked').value,dw=+sh.querySelector('#tlW').value,dh=+sh.querySelector('#tlH').value;
+  sh.querySelector('#tlGo').onclick=async()=>{const bg=sh.querySelector('#tlBg').checked,nums=sh.querySelector('#tlNum').checked,mode=(sh.querySelector('[name="tlM"]:checked')||{}).value||'rep',scale=sh.querySelector('[name="tlS"]:checked').value,dw=+sh.querySelector('#tlW').value,dh=+sh.querySelector('#tlH').value;
     if(scale==='medidas'&&!(dw>0&&dh>0)){sh.querySelector('#tlMsg').textContent='Escribe el ancho y el largo del área en metros.';return}
     const go=sh.querySelector('#tlGo'),msg=sh.querySelector('#tlMsg');go.disabled=true;$('#gModal').dataset.busy='1';
-    try{const data=await callLayout(smallB64(img,1568),()=>waitModal('La IA está leyendo el layout. Puede tardar hasta un minuto…'));gclose();applyLayout(data,img,{bg,mode,scale,dw,dh})}
+    try{const data=await callLayout(smallB64(img,1568),()=>waitModal('La IA está leyendo el layout. Puede tardar hasta un minuto…'));gclose();applyLayout(data,img,{bg,mode,scale,dw,dh,nums})}
     catch(e){errModal(e.message,()=>transcribe(f))}}}
 function applyLayout(data,img,opt){const W=img.w,H=img.h;
   if(!data.mesas&&data.elementos&&data.elementos.some(e=>'cx' in e)){toast('La app está actualizándose. Recarga la página con Ctrl + F5 e intenta de nuevo.');return}
@@ -1190,7 +1193,7 @@ function applyLayout(data,img,opt){const W=img.w,H=img.h;
   if(opt.scale==='medidas'){cpp=opt.dw*100/((rbx.x1-rbx.x0)*W);cppY=opt.dh*100/((rbx.y1-rbx.y0)*H);how=`ajustada a ${opt.dw} × ${opt.dh} m`}
   // Construir las mesas a tamaño real
   const items=[];let num=opt.mode==='rep'?1:nextNum();
-  for(const t of T){const it=buildTable(t,num);if(it.label==='Mesa '+num)num++;items.push({it,t})}
+  for(const t of T){const it=buildTable(t,num,opt.nums);if(it.label==='Mesa '+num)num++;items.push({it,t})}
   const place=(k,ky)=>{for(const {it,t} of items){it.x=t.cx*k;it.y=t.cy*ky;const a=Math.atan2(t.ay||0,t.ax||1)*180/Math.PI;if(t.lpx){it.r=((Math.round(a)+(t.flip?180:0))%360+360)%360}}};
   if(opt.scale==='estimar'){let k=cpp;place(k,k);for(let i=0;i<90&&minGap(items.map(x=>x.it))<149;i++){k*=1.03;place(k,k)}cpp=cppY=k;est=true;how='croquis sin escala';need=`${((rbx.x1-rbx.x0)*W*cpp/100).toFixed(1)} × ${((rbx.y1-rbx.y0)*H*cppY/100).toFixed(1)} m`}
   place(cpp,cppY);
@@ -1198,7 +1201,7 @@ function applyLayout(data,img,opt){const W=img.w,H=img.h;
   if(grown)how+=`, ampliada ${Math.round((Math.pow(1.04,grown)-1)*100)}% para que no se encimen`;
   if(opt.mode==='rep')P.items=[];
   let ox=0,oy=0;
-  if(opt.bg){imgCache[img.src]=img.im;Object.assign(P.venue,{mode:'image',img:img.src,imgW:W,imgH:H,cmPerPx:cpp,cmPerPxY:Math.abs(cppY-cpp)<1e-9?null:cppY,estimated:est,opacity:.5,calib:est?how:'IA, '+how})}
+  if(opt.bg){imgCache[img.src]=img.im;const clean=cleanImage(img,items,cpp,cppY);ensureImg(clean);Object.assign(P.venue,{mode:'image',img:clean,imgClean:clean,imgOrig:img.src,showOrig:false,imgW:W,imgH:H,cmPerPx:cpp,cmPerPxY:Math.abs(cppY-cpp)<1e-9?null:cppY,estimated:est,opacity:.5,calib:est?how:'IA, '+how})}
   else if(opt.mode==='rep'){ox=rbx.x0*W*cpp;oy=rbx.y0*H*cppY;Object.assign(P.venue,{mode:'blank',img:null,estimated:est,w:Math.max(500,Math.round((rbx.x1-rbx.x0)*W*cpp/10)*10),h:Math.max(500,Math.round((rbx.y1-rbx.y0)*H*cppY/10)*10)})}
   for(const {it} of items){it.x=Math.round((it.x-ox)/5)*5;it.y=Math.round((it.y-oy)/5)*5;P.items.push(it)}
   let nZ=0;for(const z of Z){const key=z.key,d=DEFS[key];if(!d)continue;const over={};const w=(z.x1-z.x0)*cpp,h=(z.y1-z.y0)*cppY;
@@ -1209,6 +1212,20 @@ function applyLayout(data,img,opt){const W=img.w,H=img.h;
   sel=null;commit();renderAll();fit();if(T3.on)queue3D();
   const rv=review();showReview(rv);const nd=(data.dudosos||[]).length,seats=items.reduce((a,x)=>a+(+x.it.seats||0),0);
   toast(est?`Acomodé ${items.length} mesas (${seats} lugares) a tamaño real con 1.50 m entre ellas. Necesitas un área de unos ${need}.`:`Transcribí ${items.length} mesas (${seats} lugares) y ${nZ} elementos. Escala ${how}.${nd?' Revisa: '+data.dudosos.slice(0,3).join(', ')+'.':''}`)}
+/* Borra del plano de fondo las mesas transcritas (con sillas y números) rellenando con el color de alrededor */
+function cleanImage(img,items,cpp,cppY){const c=document.createElement('canvas');c.width=img.w;c.height=img.h;const x=c.getContext('2d');x.drawImage(img.im,0,0);
+  const D=x.getImageData(0,0,c.width,c.height).data,pad=Math.max(6,img.w*.02);const px=(X,Y)=>{X=clamp(Math.round(X),0,c.width-1);Y=clamp(Math.round(Y),0,c.height-1);const i=(Y*c.width+X)*4;return [D[i],D[i+1],D[i+2]]};
+  const regions=[];for(const {it,t} of items){const b=bounds(it),cx=it.x/cpp,cy=it.y/cppY,round=DEFS[it.t].kind==='round';
+    regions.push({it,cx,cy,round,r:round?b.x1/cpp+pad:0,poly:round?null:[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]].map(p=>{const w=toWorldPt(it,p[0],p[1]),X=w.x/cpp,Y=w.y/cppY,dx=X-cx,dy=Y-cy,L=Math.hypot(dx,dy)||1;return [X+dx/L*pad*1.4,Y+dy/L*pad*1.4]})});
+    const per=Math.max(t.s1||0,t.s2||0),sp=t.lpx&&per?t.lpx/per:img.w*.03;
+    if(t.lpx){const hl=t.lpx/2+sp*1.15+pad*.4,hw=(t.wpx||sp*1.2)/2+sp*1.75+pad*.4,ax=t.ax,ay=t.ay,nx=-ay,ny=ax;regions.push({cx:t.cx,cy:t.cy,round:false,poly:[[-1,-1],[1,-1],[1,1],[-1,1]].map(([u,v])=>[t.cx+ax*hl*u+nx*hw*v,t.cy+ay*hl*u+ny*hw*v])})}
+    else if(t.dpx){regions.push({cx:t.cx,cy:t.cy,round:true,r:t.dpx/2+img.w*.035+pad})}}
+  for(const g of regions){const {cx,cy,round,poly}=g;let r=g.r||0;const S=[];
+    if(round){for(let a=0;a<32;a++){const an=a/32*6.283;S.push(px(cx+Math.cos(an)*(r+5),cy+Math.sin(an)*(r+5)))}}
+    else{for(let k=0;k<4;k++){const p=poly[k],q=poly[(k+1)%4];for(let s=0;s<10;s++){const t=s/10,X=p[0]+(q[0]-p[0])*t,Y=p[1]+(q[1]-p[1])*t,dx=X-cx,dy=Y-cy,L=Math.hypot(dx,dy)||1;S.push(px(X+dx/L*5,Y+dy/L*5))}}}
+    const lum=s=>s[0]+s[1]+s[2];S.sort((a,b)=>lum(b)-lum(a));const top=S.slice(0,Math.max(1,Math.round(S.length*.6)));const avg=k=>Math.round(top.reduce((a,s)=>a+s[k],0)/top.length);
+    x.fillStyle=`rgb(${avg(0)},${avg(1)},${avg(2)})`;x.beginPath();if(round)x.arc(cx,cy,r,0,7);else{x.moveTo(poly[0][0],poly[0][1]);for(const p of poly.slice(1))x.lineTo(p[0],p[1]);x.closePath()}x.fill()}
+  return c.toDataURL('image/jpeg',.88)}
 function normLayout(data,W,H){const P2=p=>Array.isArray(p)&&p.length>=2&&isFinite(p[0])&&isFinite(p[1])?{x:clamp(+p[0],0,100)/100*W,y:clamp(+p[1],0,100)/100*H}:null;
   const T=[];for(const m of data.mesas||[]){const c=P2(m.centro);if(!c)continue;const f=m.forma||'rectangular';
     const s1=Math.max(0,m.sillas_lado_1|0),s2=Math.max(0,m.sillas_lado_2|0),ce=clamp(m.sillas_cabeceras|0,0,2);
@@ -1220,7 +1237,7 @@ function normLayout(data,W,H){const P2=p=>Array.isArray(p)&&p.length>=2&&isFinit
     T.push(t)}
   const Z=(data.elementos||[]).map(e=>({key:LAYMAP[e.tipo]||'area',x0:Math.min(e.x0,e.x1)/100*W,y0:Math.min(e.y0,e.y1)/100*H,x1:Math.max(e.x0,e.x1)/100*W,y1:Math.max(e.y0,e.y1)/100*H,label:e.etiqueta})).filter(z=>isFinite(z.x0)&&z.x1>z.x0&&z.y1>z.y0);
   return {T,Z}}
-function buildTable(t,num){const per=Math.max(t.s1,t.s2),oneSide=per>0&&(t.s1===0||t.s2===0);let key=t.key,over={};
+function buildTable(t,num,nums){const per=Math.max(t.s1,t.s2),oneSide=per>0&&(t.s1===0||t.s2===0);let key=t.key,over={};
   if(key==='redonda'){const d=t.tot?stdDia(t):150;over.w=over.h=d}
   else if(key==='periquera'){over.w=over.h=70}
   else if(key==='cuadrada'){const n=t.tot||8;over.w=over.h=n<=4?90:n<=8?120:150}
@@ -1229,7 +1246,7 @@ function buildTable(t,num){const per=Math.max(t.s1,t.s2),oneSide=per>0&&(t.s1===
   if(TBL.has(DEFS[key].kind)){
     if(key==='rectangular'||key==='novios'||key==='ovalada'){it.oneSide=oneSide;if(oneSide){it.ends=false;it.seats=per}else if(t.ce>=2){it.ends=true;it.seats=t.s1+t.s2+2}else{it.ends=false;it.seats=t.s1+t.s2+t.ce}if(!it.seats)it.seats=t.tot}
     else if(!DEFS[key].cocktail)it.seats=clamp(t.tot||it.seats,0,60);
-    const lb=(t.label||'').trim();it.label=lb?(/^\d+$/.test(lb)?'Mesa '+lb:(/^mesa\s*\d+$/i.test(lb)?'Mesa '+lb.replace(/\D/g,''):lb)):(DEFS[key].oneSide||it.oneSide?(t.principal?'Novios':''):DEFS[key].cocktail?'':'Mesa '+num)}
+    const lb=(t.label||'').trim();it.label=!nums?(t.principal&&(it.oneSide||DEFS[key].oneSide)?'Novios':''):lb?(/^\d+$/.test(lb)?'Mesa '+lb:(/^mesa\s*\d+$/i.test(lb)?'Mesa '+lb.replace(/\D/g,''):lb)):(DEFS[key].oneSide||it.oneSide?(t.principal?'Novios':''):DEFS[key].cocktail?'':'Mesa '+num)}
   return it}
 function stdDia(t){const n=+(t.tot!=null?t.tot:t.sillas)||0;return n&&n<=8?120:n>=12?180:150}
 function minGap(list){let g=Infinity;for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++)g=Math.min(g,edgeGap(list[i],list[j],false));return g}
@@ -1253,11 +1270,11 @@ function edgeGap(a,b,withChairs){const ka=DEFS[a.t].kind,kb=DEFS[b.t].kind;
   if(ka==='round'&&kb==='round'){const ra=(withChairs?bounds(a):topOnly(a)).x1,rb=(withChairs?bounds(b):topOnly(b)).x1;return Math.hypot(a.x-b.x,a.y-b.y)-ra-rb}
   const box=it=>{const b0=withChairs?bounds(it):topOnly(it);const pts=[[b0.x0,b0.y0],[b0.x1,b0.y0],[b0.x1,b0.y1],[b0.x0,b0.y1]].map(p=>toWorldPt(it,p[0],p[1]));return {x0:Math.min(...pts.map(p=>p.x)),y0:Math.min(...pts.map(p=>p.y)),x1:Math.max(...pts.map(p=>p.x)),y1:Math.max(...pts.map(p=>p.y))}};
   const A=box(a),B=box(b),dx=Math.max(B.x0-A.x1,A.x0-B.x1),dy=Math.max(B.y0-A.y1,A.y0-B.y1);if(dx<0&&dy<0)return Math.max(dx,dy);return Math.hypot(Math.max(0,dx),Math.max(0,dy))}
-function review(){const out=[],ts=P.items.filter(i=>TBL.has(DEFS[i.t].kind)),zs=P.items.filter(i=>BLOCK.includes(i.t)),nm=i=>i.label||DEFS[i.t].name,cm=v=>Math.max(0,Math.round(v))+' cm';
+function review(){const out=[],ts=P.items.filter(i=>TBL.has(DEFS[i.t].kind)),zs=P.items.filter(i=>BLOCK.includes(i.t)),nm=i=>i.label||('Una mesa '+DEFS[i.t].name.toLowerCase()),pair=(a,b)=>a.label&&b.label?`${a.label} y ${b.label}`:a.label||b.label?`${a.label||b.label} y otra mesa`:'Dos mesas',cm=v=>Math.max(0,Math.round(v))+' cm';
   for(let i=0;i<ts.length;i++)for(let j=i+1;j<ts.length;j++){const a=ts[i],b=ts[j];if(Math.hypot(a.x-b.x,a.y-b.y)>900)continue;const g=edgeGap(a,b,false),gc=edgeGap(a,b,true);
-    if(gc<0&&g<0)out.push({lvl:'bad',msg:`${nm(a)} y ${nm(b)} se enciman`,ids:[a.id,b.id]});
-    else if(g<120)out.push({lvl:'bad',msg:`${nm(a)} y ${nm(b)} están muy juntas: ${cm(g)} entre mesas. No pasan meseros con las sillas ocupadas.`,ids:[a.id,b.id]});
-    else if(g<150)out.push({lvl:'warn',msg:`${nm(a)} y ${nm(b)}: ${cm(g)} entre mesas. Lo recomendado es 1.50 m.`,ids:[a.id,b.id]})}
+    if(gc<0&&g<0)out.push({lvl:'bad',msg:`${pair(a,b)} se enciman`,ids:[a.id,b.id]});
+    else if(g<120)out.push({lvl:'bad',msg:`${pair(a,b)} están muy juntas: ${cm(g)} entre mesas. No pasan meseros con las sillas ocupadas.`,ids:[a.id,b.id]});
+    else if(g<150)out.push({lvl:'warn',msg:`${pair(a,b)}: ${cm(g)} entre mesas. Lo recomendado es 1.50 m.`,ids:[a.id,b.id]})}
   for(const t of ts)for(const z of zs){const g=edgeGap(t,z,true);if(g<0)out.push({lvl:'bad',msg:`${nm(t)} queda encima de ${(z.label||DEFS[z.t].name).toLowerCase()}`,ids:[t.id,z.id]});else if(z.t==='pista'&&g<40)out.push({lvl:'warn',msg:`${nm(t)} queda pegada a la pista (${cm(g)}). Las sillas estorban al bailar.`,ids:[t.id,z.id]})}
   for(const e of P.items.filter(i=>i.t==='entrada'))for(const t of ts){const b=bounds(t),d=Math.hypot(t.x-e.x,t.y-e.y)-(DEFS[t.t].kind==='round'?b.x1:Math.max(b.x1,b.y1));if(d<150)out.push({lvl:'warn',msg:`${nm(t)} tapa el paso de la entrada (${cm(d)}). Deja al menos 1.50 m libres.`,ids:[t.id,e.id]})}
   const rb=roomBox();for(const it of P.items){if(it.t==='texto')continue;const w=worldBox(it);if(w.x0<rb.x0-5||w.y0<rb.y0-5||w.x1>rb.x1+5||w.y1>rb.y1+5)out.push({lvl:'warn',msg:`${nm(it)} sale del salón`,ids:[it.id]})}
