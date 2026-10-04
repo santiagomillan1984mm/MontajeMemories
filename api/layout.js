@@ -33,7 +33,13 @@ const TOOL = {
         punto_sillas: { ...PT, description: 'Si solo hay sillas de un lado: posición de una de esas sillas' }
       }, required: ['forma', 'centro', 'sillas_total'] } },
       elementos: { type: 'array', description: 'Pista, escenario, barra, DJ, entrada, etc. Rectángulo que ocupan, en porcentaje.', items: { type: 'object', properties: {
-        tipo: { type: 'string', enum: ZONAS }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' }, etiqueta: { type: ['string', 'null'] } }, required: ['tipo', 'x0', 'y0', 'x1', 'y1'] } },
+        tipo: { type: 'string', enum: ZONAS }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' }, etiqueta: { type: ['string', 'null'] },
+        paisajismo: { type: 'boolean', description: 'true si es vegetación o jardinería que ya forma parte del lugar (símbolos de arbustos o árboles del plano arquitectónico), no decoración del evento' } }, required: ['tipo', 'x0', 'y0', 'x1', 'y1'] } },
+      muros: { type: 'array', description: 'Paredes y bordes construidos del área del evento como líneas (polilíneas) que siguen el dibujo. Una entrada por tramo continuo.', items: { type: 'object', properties: {
+        tipo: { type: 'string', enum: ['muro', 'vidrio', 'barandal', 'murete'], description: 'muro = pared completa; vidrio = ventanal o cancel; barandal = barandal de terraza; murete = muro bajo, jardinera o borde de escalón' },
+        puntos: { type: 'array', items: PT, minItems: 2, description: 'Puntos de la línea central del muro, en orden. Para muros curvos usa varios puntos siguiendo la curva.' } }, required: ['tipo', 'puntos'] } },
+      cotas: { type: 'array', description: 'Líneas de cota con su medida escrita (por ejemplo una línea con 10.36). Sirven para la escala.', items: { type: 'object', properties: {
+        p1: PT, p2: PT, metros: { type: 'number' } }, required: ['p1', 'p2', 'metros'] } },
       zonas_piso: { type: 'array', description: 'Áreas de piso distintas dibujadas o coloreadas: jardín o pasto, alberca o agua, playa o arena, deck, adoquín, etc. Rectángulo que ocupan en porcentaje.', items: { type: 'object', properties: {
         material: { type: 'string', enum: PISOS }, forma: { type: 'string', enum: ['rectangular', 'redondeada', 'ovalada'] }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' } }, required: ['material', 'x0', 'y0', 'x1', 'y1'] } },
       piso_general: { type: ['string', 'null'], enum: [...PISOS, null], description: 'Material del área principal del evento si se distingue (por ejemplo, un jardín = pasto). null si es un salón o no se sabe.' },
@@ -44,18 +50,22 @@ const TOOL = {
   }
 };
 
-const PROMPT = `Eres asistente de una wedding planner en México. La imagen es un layout de montaje de un evento visto desde arriba. Encima le dibujé una cuadrícula roja tenue con números de 0 a 100 en los bordes: úsala para dar posiciones en porcentaje (x de izquierda a derecha, y de arriba abajo).
+const PROMPT = `Eres asistente de una wedding planner en México. La imagen es un layout de montaje de un evento o un plano arquitectónico del lugar, visto desde arriba. Encima le dibujé una cuadrícula roja tenue con números de 0 a 100 en los bordes: úsala para dar posiciones en porcentaje (x de izquierda a derecha, y de arriba abajo).
 
 Registra con la herramienta:
-1. Cada MESA numerada. Si una mesa está formada por varias mesas pegadas que comparten un solo número, regístrala como UNA sola mesa con su largo total.
+1. Cada MESA de evento dibujada. Si una mesa está formada por varias mesas pegadas que comparten un solo número, regístrala como UNA sola mesa con su largo total.
    - Para mesas alargadas da extremo_1 y extremo_2: el centro de cada cabecera (lado corto). Así queda claro hacia dónde está girada. Si la mesa está en diagonal, los extremos también.
-   - Cuenta las sillas dibujadas: sillas_lado_1 y sillas_lado_2 en los lados largos, sillas_cabeceras en las puntas, y sillas_total. Cuenta con cuidado, silla por silla. Si hay números junto a las sillas, úsalos para confirmar.
+   - Cuenta las sillas dibujadas: sillas_lado_1 y sillas_lado_2 en los lados largos, sillas_cabeceras en las puntas, y sillas_total. Cuenta con cuidado, silla por silla.
    - Si una mesa tiene sillas de un solo lado, da punto_sillas con la posición de una de esas sillas.
    - ancho_pct es el lado corto de la mesa sin sillas, en porcentaje del ancho de la imagen.
-2. Los ELEMENTOS que no son mesas (pista, escenario, barra, DJ, entrada, lounge, árboles, palmeras, setos, fuentes, pérgolas, carpas, guirnaldas de luces, farolas, sombrillas, fogatas) con el rectángulo que ocupan. No registres paredes ni la arquitectura del lugar.
-   Las ÁREAS DE PISO (jardín o pasto, alberca, playa, deck, adoquín) van en zonas_piso con su rectángulo y forma. Una alberca o área de agua aunque sea de forma irregular: usa el rectángulo que la contiene y forma ovalada o redondeada. Si todo el evento es en jardín, pon piso_general = pasto.
-3. Si hay medidas escritas del salón, ponlas en salon. Si dice cuántas personas son, ponlo en invitados.
-No inventes nada que no esté dibujado. Pon en dudosos lo que no se distinga bien.
+   - Si es un plano arquitectónico SIN mesas de evento, deja mesas vacío. No confundas muebles fijos, barras de bar, mostradores, escaleras ni rellenos de color con mesas.
+2. Los MUROS del área: sigue con líneas las paredes, ventanales, barandales y muretes dibujados (perímetro y muros interiores). Para muros curvos usa varios puntos que sigan la curva. Deja huecos donde hay puertas o accesos. Usa la línea central del muro. No traces textos, cotas, flechas, ejes, achurados, rellenos de color, escaleras ni el mobiliario.
+3. Las COTAS: si hay líneas de medida con un número (por ejemplo 10.36), registra sus dos extremos y los metros. Si hay medidas escritas del salón, ponlas también en salon.
+4. Los ELEMENTOS de evento que no son mesas (pista, escenario, barra, DJ, entrada, lounge, pérgolas, carpas, guirnaldas de luces, farolas, sombrillas, fogatas) con el rectángulo que ocupan. No registres paredes aquí (van en muros).
+   Árboles, palmeras, arbustos y setos: regístralos solo si son decoración del evento. Si son los símbolos de jardinería del plano arquitectónico, márcalos con paisajismo = true.
+5. Las ÁREAS DE PISO (jardín o pasto, alberca, playa, deck, adoquín) van en zonas_piso con su rectángulo y forma. Si todo el evento es en jardín, pon piso_general = pasto.
+6. Si dice cuántas personas son, ponlo en invitados.
+Ignora los textos, nombres de áreas, rellenos y sombreados del plano: no son objetos. No inventes nada que no esté dibujado. Pon en dudosos lo que no se distinga bien.
 Responde únicamente llamando a la herramienta registrar_layout.`;
 
 // ---- Estilo de mesa y ambiente del lugar desde una foto ----
@@ -115,7 +125,7 @@ module.exports = async (req, res) => {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: modo === 'layout' ? 12000 : 4000, tools: [tool], tool_choice: { type: 'auto' },
+    body: JSON.stringify({ model: MODEL, max_tokens: modo === 'layout' ? 16000 : 4000, tools: [tool], tool_choice: { type: 'auto' },
       messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: body.mime, data: body.b64 } }, { type: 'text', text }] }] })
   });
   const j = await r.json().catch(() => ({}));
