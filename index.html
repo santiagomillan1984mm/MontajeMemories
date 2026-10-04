@@ -129,6 +129,7 @@ details[open] summary::after{content:'−'}
 .numc{justify-content:space-between}.numc input{width:64px}
 .refph{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:12px;background:var(--surface-2)}.refph img{width:84px;height:64px;object-fit:cover;border-radius:8px}
 @media (max-width:700px){.phrev{grid-template-columns:1fr}}
+.steps{margin:6px 0 10px;padding-left:20px;display:grid;gap:12px;font-size:13.5px}
 .tlq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 10px;display:grid;gap:6px}.tlq legend{font-weight:600;font-size:13px;padding:0 6px}
 .trcard{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:12px 14px}
 .revl{display:grid;gap:6px}
@@ -198,7 +199,7 @@ table.inv td.n{text-align:right;font-family:var(--font-mono);font-variant-numeri
           <div class="seg" role="group" aria-label="Ambiente"><button type="button" data-n3="0">Día</button><button type="button" data-n3="2">Atardecer</button><button type="button" data-n3="1">Noche</button></div>
           <select id="t3q" aria-label="Calidad"><option value="alta">Calidad alta</option><option value="media">Calidad media</option><option value="baja">Calidad baja</option></select>
           <button type="button" class="btn sm" id="t3reset">Centrar</button>
-          <button type="button" class="btn sm primary" id="t3photo">Foto</button>
+          <button type="button" class="btn sm" id="t3photo">Foto</button><button type="button" class="btn sm primary" id="t3ai">Render realista</button>
         </div>
         <div id="walkpad" class="walkpad" hidden>
           <span></span><button type="button" data-k3="f" aria-label="Avanzar">▲</button><span></span>
@@ -1314,6 +1315,56 @@ function applyAmbient(o){const v=P.venue,rb=roomBox();v.floor=o.floor;v.ground=o
   if(o.car&&tabs.length)add('carpa',(TB.x0+TB.x1)/2,(TB.y0+TB.y1)/2,{w:Math.round((tw+500)/10)*10,h:Math.round((th+500)/10)*10});
   commit();renderVenue();if(REV)showReview(review(),true);return n}
 
+/* ---------- Mejoras de realismo 3D ---------- */
+function envMap(S,renderer,dusk,night){if(!renderer||!THREE.PMREMGenerator)return null;const pm=new THREE.PMREMGenerator(renderer);const es=new THREE.Scene();
+  const g=new THREE.SphereGeometry(50,32,16),n=g.attributes.position.count,cols=new Float32Array(n*3);
+  const top=new THREE.Color(night?'#0B1020':dusk?'#3A4A8A':'#9CC4EE'),hor=new THREE.Color(night?'#2A2030':dusk?'#F5A070':'#F2F4F6'),bot=new THREE.Color(night?'#0A0A0A':dusk?'#4A3020':'#8A8070');
+  for(let i=0;i<n;i++){const y=g.attributes.position.getY(i)/50,c=y>0?hor.clone().lerp(top,Math.min(1,y*1.4)):hor.clone().lerp(bot,Math.min(1,-y*2));cols[i*3]=c.r*.42;cols[i*3+1]=c.g*.42;cols[i*3+2]=c.b*.42}
+  g.setAttribute('color',new THREE.BufferAttribute(cols,3));const sm=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide});es.add(new THREE.Mesh(g,sm));
+  const lm=new THREE.MeshBasicMaterial({color:night?0x806448:dusk?0x806850:0x8A8A8A}),pg=new THREE.PlaneGeometry(16,16);for(const [x,y,z] of [[22,30,12],[-26,24,-16],[0,40,-30]]){const b=new THREE.Mesh(pg,lm);b.position.set(x,y,z);b.lookAt(0,0,0);es.add(b)}
+  const rt=pm.fromScene(es,.035);pm.dispose();g.dispose();sm.dispose();lm.dispose();pg.dispose();S.disp.push(rt);return rt.texture}
+let AO_TEX=null;
+function aoTex(){if(AO_TEX)return AO_TEX;const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,6,64,64,64);g.addColorStop(0,'rgba(0,0,0,.62)');g.addColorStop(.55,'rgba(0,0,0,.32)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,128,128);
+  AO_TEX=new THREE.CanvasTexture(c);AO_TEX.userData={keep:1};return AO_TEX}
+const AO_MAT={};function aoMat(o){const k=String(o);if(AO_MAT[k])return AO_MAT[k];const m=new THREE.MeshBasicMaterial({map:aoTex(),transparent:true,opacity:o,depthWrite:false});m.userData.keep=1;return AO_MAT[k]=m}
+function contactShadow(g,w,d,op){const p=new THREE.Mesh(new THREE.PlaneGeometry(w,d),aoMat(op||.55));p.rotation.x=-Math.PI/2;p.position.y=.004;p.renderOrder=1;g.add(p);return p}
+
+/* ---------- Render realista con ChatGPT ---------- */
+function dominantStyle(){const ts=P.items.filter(i=>TBL.has(DEFS[i.t].kind)&&!DEFS[i.t].cocktail);if(!ts.length)return null;const cnt=new Map();
+  for(const t of ts){const k=JSON.stringify([t.linen,t.chair,t.center,t.runner,t.place]);cnt.set(k,(cnt.get(k)||0)+1)}const best=[...cnt.entries()].sort((a,b)=>b[1]-a[1])[0][0];return ts.find(t=>JSON.stringify([t.linen,t.chair,t.center,t.runner,t.place])===best)}
+function renderPrompt(){const v=P.venue,ts=P.items.filter(i=>TBL.has(DEFS[i.t].kind)),byType={};for(const t of ts){const n=DEFS[t.t].name.toLowerCase();byType[n]=(byType[n]||0)+1}
+  const amb=T3.amb===2?'al atardecer, con luz dorada y cálida':T3.amb===1?'de noche, iluminado con velas, focos cálidos y guirnaldas encendidas':'de día, con luz natural suave';
+  const kind={salon:'un salón cerrado',aire:'un espacio al aire libre',terraza:'una terraza con barandal de vidrio',barda:'un jardín con barda baja'}[venueKind(v)];
+  const floor=v.floor?nm(FLOORMATS,v.floor).toLowerCase():'';const st=dominantStyle();const L=[];
+  L.push('Convierte esta imagen 3D en una FOTOGRAFÍA REALISTA y profesional de un montaje de boda, como tomada por un fotógrafo de bodas con cámara full frame y lente de 35 mm.');
+  L.push('MUY IMPORTANTE: respeta exactamente el acomodo de la imagen: la misma cantidad de mesas, su forma, su posición y orientación, la pista y los demás elementos en el mismo lugar. No agregues ni quites mesas ni sillas. Mantén el mismo punto de vista de la cámara.');
+  L.push(`Lugar: ${kind}${floor?', con piso de '+floor:''}${v.sea?', con vista al mar al fondo':''}. Momento: ${amb}.`);
+  if(ts.length)L.push(`Mesas: ${Object.entries(byType).map(([n,c])=>`${c} ${n}${c>1?'s':''}`).join(', ')}, con ${ts.reduce((a,t)=>a+(+t.seats||0),0)} lugares en total.`);
+  if(st){const l=st.linen,c=st.chair,p=st.place,cn=st.center;
+    L.push(`Mantel: ${l.fabric==='ninguno'?'sin mantel, mesa de '+nm(SURFACES,l.surface).toLowerCase():nm(FABRICS,l.fabric).toLowerCase()+' color '+colorName(l.color).toLowerCase()+(l.drop==='piso'?' hasta el piso':' con caída corta')}.${st.overlay&&st.overlay.fabric?' Sobremantel de '+nm(OVERLAYS,st.overlay.fabric).toLowerCase()+' '+colorName(st.overlay.color).toLowerCase()+'.':''}${st.runner&&st.runner.style?' Camino de mesa: '+nm(RUNNERS,st.runner.style).toLowerCase()+(st.runner.style!=='follaje'?' '+colorName(st.runner.color).toLowerCase():'')+'.':''}`);
+    L.push(`Sillas: ${chairName(c.type)} color ${colorName(c.color).toLowerCase()}${c.cushion?', con cojín '+colorName(c.cushion).toLowerCase():''}${c.deco?', decoradas con '+nm(CHAIRDECO,c.deco).toLowerCase():''}.`);
+    if(p&&p.on)L.push(`Cada lugar: ${p.charger?'plato base '+nm(CHARGERS,p.charger).toLowerCase()+', ':''}plato blanco, servilleta ${colorName(p.napkin).toLowerCase()} (${nm(FOLDS,p.fold).toLowerCase()}), cubiertos ${nm(CUTLERY,p.cutlery).toLowerCase()} y ${p.glasses} copa${p.glasses===1?'':'s'} ${p.glass==='cristal'?'de cristal':p.glass==='dorado'?'de cristal con filo dorado':'de cristal color '+nm(GLASS,p.glass).toLowerCase()}.`);
+    if(cn&&cn.type!=='ninguno')L.push(`Centro de mesa: ${nm(CENTERS,cn.type).toLowerCase()}${cn.type!=='velas'?` con ${nm(FLOWERS,cn.flower).toLowerCase()} en tonos ${cn.palette==='De la foto'?'como en la foto de referencia':cn.palette.toLowerCase()}, en florero ${({cristal:'de cristal',dorado:'dorado',plata:'plateado',ceramica:'de cerámica blanca',barro:'de barro',madera:'de madera',mimbre:'de mimbre',mercurio:'de vidrio mercurio'})[cn.vase]||''}`:''}.`)}
+  const ambItems={};for(const it of P.items)if(AMB.has(it.t)&&it.t!=='piso'){const n=DEFS[it.t].name.toLowerCase();ambItems[n]=(ambItems[n]||0)+1}
+  if(Object.keys(ambItems).length)L.push(`Ambiente: ${Object.entries(ambItems).map(([n,c])=>c>1?`${c} ${n}s`:n).join(', ')}.`);
+  const refs=P.items.some(i=>i.refPhoto)||v.refPhoto;if(refs)L.push('También te adjunto una foto de referencia: copia ese estilo de mesa (texturas, flores y colores) lo más fiel posible.');
+  L.push('Estilo: fotografía editorial de bodas, colores naturales, texturas reales en telas, madera, vidrio y flores, profundidad de campo suave, sin personas, sin texto, sin marcas de agua.');
+  return L.join('\n\n')}
+async function renderChatGPT(){if(!T3.renderer){toast('Abre la vista 3D primero.');return}
+  const pr=T3.renderer.getPixelRatio();T3.renderer.setPixelRatio(2);sizeRenderer();render3D();const blob=await new Promise(res=>T3.renderer.domElement.toBlob(res,'image/jpeg',.92));T3.renderer.setPixelRatio(pr);sizeRenderer();T3.need=true;
+  if(!blob){toast('No se pudo tomar la imagen del 3D.');return}const url=URL.createObjectURL(blob),prompt=renderPrompt(),refs=[...new Set([...P.items.filter(i=>i.refPhoto).map(i=>i.refPhoto),P.venue.refPhoto].filter(Boolean))];
+  const sh=gmodal(`<h2>Render realista con ChatGPT</h2><p class="note">Tip: la vista que tengas en pantalla es la que se usa. Con <b>Recorrido</b>, a la altura de los ojos, los renders se ven más reales.</p>
+   <img src="${url}" alt="Vista 3D para el render" style="width:100%;border-radius:10px;border:1px solid var(--line);margin:10px 0">
+   <ol class="steps"><li><b>Descarga la imagen</b> del 3D.${refs.length?` Descarga también ${refs.length===1?'la foto':'las fotos'} de referencia.`:''}<div class="actions" style="margin-top:6px"><button class="btn sm primary" id="rcImg">Descargar imagen 3D</button>${refs.map((r,i)=>`<button class="btn sm" data-ref="${i}">Foto de referencia${refs.length>1?' '+(i+1):''}</button>`).join('')}</div></li>
+   <li><b>Copia las instrucciones.</b> Ya llevan los detalles del evento; puedes editarlas aquí.<textarea id="rcTxt" style="min-height:150px;margin-top:6px;font-size:12.5px">${esc(prompt)}</textarea><div class="actions" style="margin-top:6px"><button class="btn sm primary" id="rcCopy">Copiar instrucciones</button></div></li>
+   <li><b>Abre ChatGPT</b>, sube la imagen${refs.length?' y la foto de referencia':''}, pega las instrucciones y envía.<div class="actions" style="margin-top:6px"><a class="btn sm" href="https://chatgpt.com/" target="_blank" rel="noopener">Abrir ChatGPT</a></div></li></ol>
+   <p class="note">El render es una interpretación de la IA: sirve para mostrarle a la novia cómo se verá. Para medidas y cantidades usa el plano y el PDF.</p>
+   <div class="actions"><button class="btn" id="rcX">Cerrar</button></div>`);
+  sh.classList.add('wide2');sh.querySelector('#rcX').onclick=()=>{URL.revokeObjectURL(url);gclose()};
+  sh.querySelector('#rcImg').onclick=()=>saveFile(fname('jpg').replace('-plano.jpg','-render-3d.jpg'),blob);
+  sh.querySelectorAll('[data-ref]').forEach(b=>b.onclick=async()=>{const r=refs[+b.dataset.ref];const bl=await (await fetch(r)).blob();saveFile(fname('jpg').replace('-plano.jpg','-referencia-'+(+b.dataset.ref+1)+'.jpg'),bl)});
+  sh.querySelector('#rcCopy').onclick=async()=>{const t=sh.querySelector('#rcTxt');try{await navigator.clipboard.writeText(t.value);toast('Instrucciones copiadas. Pégalas en ChatGPT.')}catch(e){t.focus();t.select();toast('Selecciona el texto y cópialo con Ctrl + C.')}}}
+
 /* ---------- Transcribir layout con IA y revisar distribución ---------- */
 const LAYMAP={mesa_redonda:'redonda',mesa_ovalada:'ovalada',mesa_rectangular:'rectangular',mesa_cuadrada:'cuadrada',mesa_serpentina:'serpentina',mesa_novios:'novios',mesa_honor:'honor',periquera:'periquera',pista:'pista',escenario:'tarima',dj:'dj',barra:'barra',pastel:'pastel',postres:'postres',regalos:'regalos',bienvenida:'bienvenida',photobooth:'photobooth',lounge:'lounge',arco:'arco',entrada:'entrada',banos:'banos',cocina:'cocina',columna:'columna',muro:'pared',planta:'planta',pantalla:'pantalla',sillas_ceremonia:'ceremonia',otro:'area',arbol:'arbol',palmera:'palmera',arbusto:'arbusto',seto:'seto',fuente:'fuente',pergola:'pergola',carpa:'carpa',guirnalda:'guirnalda',farola:'farola',sombrilla:'sombrilla',fogata:'fogata'};
 function gmodal(html){let m=$('#gModal');if(!m){m=document.createElement('div');m.className='modal';m.id='gModal';m.innerHTML='<div class="sheet" role="dialog" aria-modal="true"></div>';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m&&!m.dataset.busy)m.hidden=true})}const sh0=m.querySelector('.sheet');sh0.className='sheet';sh0.innerHTML=html;m.hidden=false;delete m.dataset.busy;return m.querySelector('.sheet')}
@@ -1679,6 +1730,7 @@ function table3D(S,it){const d=DEFS[it.t],k=d.kind,L=it.linen,bare=L.fabric==='n
   else{const fm=fabricMat(L.fabric,L.color);if(L.drop==='piso')g.add(slab(S,shape2D(it,k,4),0,H,fm));else{g.add(slab(S,shape2D(it,k,4),H-.3,H,fm));legs3D(S,g,it,k,H-.3,matc('#4a4a4a',.5,.4))}}
   g.add(itemTexPlane(S,it,H+.004,(x,s)=>drawTable(x,it,s,{export:true,top3d:true}),bx));
   for(const s of seatsOf(it)){const c=chair3D(it.chair,S);c.position.set(s.x*M3,0,s.y*M3);c.rotation.y=-s.a;g.add(c)}
+  {const bb=bounds(it);contactShadow(g,(bb.x1-bb.x0)*M3*1.12,(bb.y1-bb.y0)*M3*1.12,.5).position.set((bb.x0+bb.x1)/2*M3,.004,(bb.y0+bb.y1)/2*M3)}
   center3D(S,it,k,H,g);
   g.position.set(it.x*M3,0,it.y*M3);g.rotation.y=-it.r*Math.PI/180;return g}
 function zone3D(S,it){const t=it.t,W=it.w*M3,D=it.h*M3,g=new THREE.Group(),flat=y=>g.add(itemTexPlane(S,it,y,(x,s)=>drawZone(x,it,s)));
@@ -1712,9 +1764,10 @@ function zone3D(S,it){const t=it.t,W=it.w*M3,D=it.h*M3,g=new THREE.Group(),flat=
     default:flat(.006);
   }
   g.position.set(it.x*M3,0,it.y*M3);g.rotation.y=-it.r*Math.PI/180;return g}
-function buildScene(night,q){
+function buildScene(night,q,renderer){
   const S={q,night,shadows:q!=='baja',disp:[],spots:[],walls:[]};const scene=new THREE.Scene();S.scene=scene;
   const dusk=!night&&T3.amb===2;S.lit=night||dusk;
+  const env=q!=='baja'?envMap(S,renderer,dusk,night):null;if(env)scene.environment=env;
   const sky=(cols)=>{const cv=document.createElement('canvas');cv.width=8;cv.height=256;const x=cv.getContext('2d'),g=x.createLinearGradient(0,0,0,256);cols.forEach((c,i)=>g.addColorStop(i/(cols.length-1),c));x.fillStyle=g;x.fillRect(0,0,8,256);const t=texFromCanvas(cv);S.disp.push(t);return t};
   const horizon=night?'#151B26':dusk?'#F2A27A':'#DCE6EE';
   scene.background=night?sky(['#05070C','#0B0E14','#151B26']):dusk?sky(['#2E3A6E','#8A5C8E','#E58A6E','#F7C58A']):sky(['#7FB2E0','#B5D3EE','#E4EDF3']);scene.fog=new THREE.Fog(horizon,70,190);
@@ -1746,7 +1799,7 @@ function buildScene(night,q){
     else o=zone3D(S,it);
     if(o)scene.add(o)}
   // luces
-  const hemi=new THREE.HemisphereLight(night?'#6C7AA8':dusk?'#FFC9A8':'#F4F7FF',night?'#20170F':dusk?'#4A3226':'#B9A88F',night?.22:dusk?.42:.55);scene.add(hemi);
+  const hemi=new THREE.HemisphereLight(night?'#6C7AA8':dusk?'#FFC9A8':'#F4F7FF',night?'#20170F':dusk?'#4A3226':'#B9A88F',(night?.22:dusk?.42:.55)*(env?.35:1));scene.add(hemi);
   const sun=new THREE.DirectionalLight(night?'#8FA3D6':dusk?'#FFB27A':'#FFF1DE',night?.12:dusk?1.05:1.25);const span=Math.max(RW,RD);sun.position.set(RW/2-span*.35,dusk?span*.32:span*.9,RD/2-span*(dusk?.9:.25));sun.target.position.set(RW/2,0,RD/2);scene.add(sun);scene.add(sun.target);
   if(S.shadows&&!night){sun.castShadow=true;const ms=q==='alta'?4096:2048;sun.shadow.mapSize.set(ms,ms);const sc=sun.shadow.camera;sc.left=-span*.75;sc.right=span*.75;sc.top=span*.75;sc.bottom=-span*.75;sc.near=1;sc.far=span*3;sun.shadow.bias=-.0004;sun.shadow.normalBias=.02}
   if(night||dusk){const k=dusk?.55:1;const pts=S.spots.slice();const max=q==='baja'?6:q==='alta'?20:12;const chosen=[];const step=Math.max(1,Math.ceil(pts.length/max));for(let i=0;i<pts.length&&chosen.length<max;i+=step)chosen.push(pts[i]);
@@ -1777,7 +1830,7 @@ async function open3D(){
   if(!T3.orb)T3.orb=defaultOrbit();if(!T3.walk)T3.walk=defaultWalk();
   await document.fonts.ready;rebuild3D();ld.hidden=true;sizeRenderer();T3.t0=0;cancelAnimationFrame(T3.raf);T3.raf=requestAnimationFrame(loop3D);sync3DUI()}
 function close3D(){T3.on=false;cancelAnimationFrame(T3.raf);$('#three').hidden=true;$('.floaty').hidden=false;$('#v3d').setAttribute('aria-pressed','false');$('#v2d').setAttribute('aria-pressed','true');updateHint();dirty=true}
-function rebuild3D(){if(!window.THREE||!T3.renderer)return;if(T3.S)T3.S.dispose();T3.renderer.shadowMap.enabled=T3.q!=='baja';T3.S=buildScene(T3.night,T3.q);T3.renderer.toneMappingExposure=T3.night?1.25:T3.amb===2?.95:.9;T3.need=true}
+function rebuild3D(){if(!window.THREE||!T3.renderer)return;if(T3.S)T3.S.dispose();T3.renderer.shadowMap.enabled=T3.q!=='baja';T3.S=buildScene(T3.night,T3.q,T3.renderer);T3.renderer.toneMappingExposure=T3.night?1.25:T3.amb===2?.95:.9;T3.need=true}
 let rb3T;function queue3D(){if(!T3.on)return;clearTimeout(rb3T);rb3T=setTimeout(rebuild3D,250)}
 function sync3DUI(){document.querySelectorAll('[data-m3]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m3===T3.mode)));document.querySelectorAll('[data-n3]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.n3===T3.amb)));
   $('#walkpad').hidden=T3.mode!=='walk';$('#t3help').textContent=T3.mode==='walk'?'Arrastra para mirar alrededor. Camina con las flechas, con W A S D o tocando el piso.':'Arrastra para girar. Clic derecho o dos dedos para mover. Rueda o pellizco para acercar.';$('#t3q').value=T3.q}
@@ -1805,7 +1858,7 @@ function bind3D(cv){const ptr=new Map();let last=null,pinch=null,downAt=null,btn
 const KEYMAP={w:'f',arrowup:'f',s:'b',arrowdown:'b',a:'l',d:'r',arrowleft:'tl',arrowright:'tr',q:'tl',e:'tr'};
 function pan3D(dx,dy){const o=T3.orb,k=o.r*.0016,c=Math.cos(o.theta),s=Math.sin(o.theta);o.tx+=(-c*dx-s*dy)*k;o.tz+=(s*dx-c*dy)*k;const rb=roomBox();o.tx=clamp(o.tx,-5,rb.x1*M3+5);o.tz=clamp(o.tz,-5,rb.y1*M3+5)}
 async function snapshot3D(w,h){await ensureThree();const cv=document.createElement('canvas');cv.width=w;cv.height=h;const r=makeRenderer(cv,'alta',1);r.setSize(w,h,false);
-  const S=buildScene(T3.night,'alta');const cam=new THREE.PerspectiveCamera(50,w/h,.05,400);placeCam(cam,'orbit',T3.orb||defaultOrbit(),null);
+  const S=buildScene(T3.night,'alta',r);const cam=new THREE.PerspectiveCamera(50,w/h,.05,400);placeCam(cam,'orbit',T3.orb||defaultOrbit(),null);
   r.toneMappingExposure=T3.night?1.25:.9;r.render(S.scene,cam);const url=cv.toDataURL('image/jpeg',.9);S.dispose();r.dispose();r.forceContextLoss&&r.forceContextLoss();return url}
 async function photo3D(){if(!T3.renderer)return;const pr=T3.renderer.getPixelRatio();T3.renderer.setPixelRatio(2);sizeRenderer();render3D();const blob=await new Promise(res=>T3.renderer.domElement.toBlob(res,'image/png'));T3.renderer.setPixelRatio(pr);sizeRenderer();
   if(blob)saveFile(fname('png').replace('-plano.png','-3d.png'),blob)}
@@ -1813,7 +1866,7 @@ $('#v3d').onclick=()=>{if(!T3.on)open3D()};$('#v2d').onclick=()=>{if(T3.on)close
 document.querySelectorAll('[data-m3]').forEach(b=>b.onclick=()=>{T3.mode=b.dataset.m3;if(T3.mode==='walk'&&T3.walk){const rb=roomBox();if(T3.walk.x<0||T3.walk.z<0||T3.walk.x>rb.x1*M3||T3.walk.z>rb.y1*M3)T3.walk=defaultWalk()}T3.tween=null;sync3DUI();T3.need=true});
 document.querySelectorAll('[data-n3]').forEach(b=>b.onclick=()=>{T3.amb=+b.dataset.n3;T3.night=T3.amb===1;sync3DUI();rebuild3D()});
 $('#t3q').onchange=e=>{T3.q=e.target.value;if(T3.renderer){T3.renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)*(T3.q==='baja'?.75:1));sizeRenderer()}rebuild3D()};
-$('#t3photo').onclick=()=>photo3D();
+$('#t3photo').onclick=()=>photo3D();$('#t3ai').onclick=()=>renderChatGPT();
 $('#t3reset').onclick=()=>{if(T3.mode==='walk')T3.walk=defaultWalk();else T3.orb=defaultOrbit();T3.tween=null;T3.need=true};
 document.querySelectorAll('#walkpad [data-k3]').forEach(b=>{const k=b.dataset.k3,on=e=>{e.preventDefault();T3.keys[k]=true},off=()=>{T3.keys[k]=false};b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off)});
 
