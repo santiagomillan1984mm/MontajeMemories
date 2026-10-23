@@ -836,8 +836,16 @@ function blobs(){const c=erCanvas();if(!c)return null;if(BLOB&&BLOB.src===ER.src
     while(sp){const i=st[--sp],x=i%sw,y=(i-x)/sw;if(x<q.x0)q.x0=x;if(x>q.x1)q.x1=x;if(y<q.y0)q.y0=y;if(y>q.y1)q.y1=y;if(m[i]){q.n++;q.r+=d[i*4];q.g+=d[i*4+1];q.b+=d[i*4+2]}
       if(x>0&&dm[i-1]&&!lab[i-1]){lab[i-1]=id;st[sp++]=i-1}if(x<sw-1&&dm[i+1]&&!lab[i+1]){lab[i+1]=id;st[sp++]=i+1}
       if(y>0&&dm[i-sw]&&!lab[i-sw]){lab[i-sw]=id;st[sp++]=i-sw}if(y<sh-1&&dm[i+sw]&&!lab[i+sw]){lab[i+sw]=id;st[sp++]=i+sw}}
-    if(q.n){q.r/=q.n;q.g/=q.n;q.b/=q.n}q.w=q.x1-q.x0+1;q.h=q.y1-q.y0+1;comps.push(q)}
-  BLOB={src:ER.src,w:c.width,f,sw,sh,lab,comps};return BLOB}
+    if(q.n){q.r/=q.n;q.g/=q.n;q.b/=q.n}q.w=q.x1-q.x0+1;q.h=q.y1-q.y0+1;q.ids=[id];comps.push(q)}
+  BLOB={src:ER.src,w:c.width,f,sw,sh,lab,comps,owner:new Int32Array(comps.length+1).map((_,i)=>i)};mergeFrags(BLOB);BLOB.comps=BLOB.comps.filter(q=>!q.dead);return BLOB}
+// Una silla dibujada a veces son varios trazos sueltos (respaldo, patas): se juntan los pedacitos con su silla
+function mergeFrags(B){const u=blobCm(B),dim=q=>Math.max(q.w*u.x,q.h*u.y),small=B.comps.filter(q=>dim(q)<95);
+  const thin=q=>Math.min(q.w*u.x,q.h*u.y)<15,frags=small.filter(q=>dim(q)<30||thin(q)).sort((a,b)=>dim(b)-dim(a));
+  for(const f of frags){if(f.dead)continue;let best=null,bg=1e9;
+    for(const c of small){if(c===f||c.dead)continue;const gx=Math.max(0,c.x0-f.x1,f.x0-c.x1),gy=Math.max(0,c.y0-f.y1,f.y0-c.y1),g=Math.hypot(gx*u.x,gy*u.y);if(g>=12||g>=bg)continue;
+      const W=(Math.max(c.x1,f.x1)-Math.min(c.x0,f.x0)+1)*u.x,H=(Math.max(c.y1,f.y1)-Math.min(c.y0,f.y0)+1)*u.y;if(Math.max(W,H)>90)continue;bg=g;best=c}
+    if(!best)continue;const c=best;c.x0=Math.min(c.x0,f.x0);c.y0=Math.min(c.y0,f.y0);c.x1=Math.max(c.x1,f.x1);c.y1=Math.max(c.y1,f.y1);c.w=c.x1-c.x0+1;c.h=c.y1-c.y0+1;
+    const n=c.n+f.n||1;c.r=(c.r*c.n+f.r*f.n)/n;c.g=(c.g*c.n+f.g*f.n)/n;c.b=(c.b*c.n+f.b*f.n)/n;c.n+=f.n;for(const id of f.ids){c.ids.push(id);B.owner[id]=c.id}f.dead=true;f.ids=[]}}
 // cm que mide un pixel de la imagen de trabajo
 function blobCm(B){const v=P.venue,c=ER.cv,k=(v.imgW||c.width)/c.width;return {x:v.cmPerPx*k/B.f,y:(v.cmPerPxY||v.cmPerPx)*k/B.f}}
 const isVeg=q=>(q.g>q.r+18&&q.g>q.b+8)||(q.b>q.r+40&&q.b>q.g+10);
@@ -848,11 +856,14 @@ function textIds(L){// letras: van en renglón, pegadas y de anchos distintos; l
   const G=new Map();for(const q of L){const r=fd(q.id);if(!G.has(r))G.set(r,[]);G.get(r).push(q)}const out=new Set();
   const cv=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;return Math.sqrt(a.reduce((x,y)=>x+(y-mu)**2,0)/a.length)/(mu||1)};
   for(const g of G.values())if(g.length>=3&&(cv(g.map(q=>q.w))>.2||cv(g.map(q=>q.h))>.2))for(const q of g)out.add(q.id);return out}
-function cutComp(B,q,asChair){const c=erCanvas(),f=B.f,X=clamp(Math.floor(q.x0/f)-1,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-1,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+1-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+1-Y,1,c.height-Y);
+function cutComp(B,q,asChair){const c=erCanvas(),f=B.f,pd0=Math.ceil(2/f),X=clamp(Math.floor(q.x0/f)-pd0,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-pd0,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+pd0-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+pd0-Y,1,c.height-Y);
+  const own=new Uint8Array(B.owner.length+1);for(const id of q.ids)own[id]=1;
   const cx=c.getContext('2d',{willReadFrequently:true}),fill=holeFill(c,X,Y),src=cx.getImageData(X,Y,Wd,Hd),pd=new ImageData(Wd,Hd),a=src.data,b=pd.data;
   const fc=document.createElement('canvas').getContext('2d');fc.fillStyle=fill;fc.fillRect(0,0,1,1);const F=fc.getImageData(0,0,1,1).data;
-  for(let py=0;py<Hd;py++){const sy=Math.min(B.sh-1,Math.floor((Y+py)*f));for(let px=0;px<Wd;px++){const sx=Math.min(B.sw-1,Math.floor((X+px)*f));if(B.lab[sy*B.sw+sx]!==q.id)continue;
-    const o=(py*Wd+px)*4,mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>247?0:mn>236?Math.round(255*(247-mn)/11):255;a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
+  for(let py=0;py<Hd;py++){const sy=Math.min(B.sh-1,Math.floor((Y+py)*f));for(let px=0;px<Wd;px++){const sx=Math.min(B.sw-1,Math.floor((X+px)*f)),l=B.lab[sy*B.sw+sx],o=(py*Wd+px)*4;
+    // lo de esta pieza se lleva; los restitos claros que quedan en su recuadro se limpian
+    if(own[l]){const mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>247?0:mn>236?Math.round(255*(247-mn)/11):255}else if(l!==0)continue;
+    a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
   cx.putImageData(src,X,Y);ER.live=true;
   if(asChair){const v=P.venue,k=(v.imgW||c.width)/c.width,it=makeItem('silla',Math.round((X+Wd/2)*k*v.cmPerPx),Math.round((Y+Hd/2)*k*(v.cmPerPxY||v.cmPerPx)));P.items.push(it);return it}
   const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;pc.getContext('2d').putImageData(pd,0,0);return placePiece(pc,X,Y,Wd,Hd,c)}
@@ -870,7 +881,7 @@ async function autoPieces(){const c=erCanvas();if(!c){toast('Primero sube un pla
   toast(`Separé ${parts.join(' y ')} del plano. Toca una silla para cambiarle el estilo. Si falta algo, usa las tijeras y tócalo.`)}
 async function clickCut(w){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const B=blobs(),p=w2img(w),x=Math.floor(p.x*B.f),y=Math.floor(p.y*B.f);let id=0,best=1e9;
   for(let dy=-8;dy<=8;dy++)for(let dx=-8;dx<=8;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=B.sw||Y>=B.sh)continue;const l=B.lab[Y*B.sw+X];if(l&&dx*dx+dy*dy<best){best=dx*dx+dy*dy;id=l}}
-  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima.');return}const q=B.comps[id-1],M=Math.max(B.sw,B.sh);
+  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima.');return}const oid=B.owner[id],q=B.comps.find(c=>c.id===oid),M=Math.max(B.sw,B.sh);if(!q)return;
   if(Math.max(q.w,q.h)>.4*M){toast('Eso está pegado a las paredes del plano. Márcalo arrastrando un recuadro.');return}
   const chair=isChairBlob(B,q);cutComp(B,q,chair);await commitPlan();BLOB=null;dirty=true;toast(chair?'Silla separada. Toca otra o Listo; luego tócala para elegir su estilo.':'Pieza separada. Toca otra o Listo para moverlas.')}
 function askPlanTables(img){const sh=gmodal(`<h2>¿El plano ya trae mesas dibujadas?</h2><p class="note">Las puedo convertir en mesas y sillas que se mueven.</p>
