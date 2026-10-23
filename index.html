@@ -228,6 +228,7 @@ table.inv td.n{text-align:right;font-family:var(--font-mono);font-variant-numeri
         <button class="btn" id="zin" title="Acercar" aria-label="Acercar">+</button>
         <button class="btn" id="zout" title="Alejar" aria-label="Alejar">−</button>
         <button class="btn" id="zfit" title="Ver todo" aria-label="Ver todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button class="btn" id="handBtn" title="Navegar: mover el plano" aria-label="Navegar: mover el plano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button>
         <button class="btn" id="erBtn" title="Borrador" aria-label="Borrador" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4L13.6 4.4a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L10 20"/><path d="M7 21h13M9 9l6 6"/></svg></button>
         <button class="btn" id="cutBtn" title="Recortar una mesa del plano para moverla" aria-label="Recortar una mesa del plano para moverla" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg></button>
         <button class="btn" id="measure" title="Medir distancia" aria-label="Medir distancia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="8" width="20" height="8" rx="1"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/></svg></button>
@@ -785,20 +786,54 @@ function eraseLine(a,b){const c=erCanvas();if(!c)return;const x=c.getContext('2d
 async function commitPlan(){const c=ER.cv,v=P.venue;if(!c)return;const old=v.img,url=c.toDataURL('image/jpeg',.92);const im=new Image();await new Promise(r=>{im.onload=r;im.onerror=r;im.src=url});imgCache[url]=im;
   v.img=url;if(v.imgClean===old)v.imgClean=url;if(v.imgOrig===old&&!v.imgClean)v.imgOrig=url;ER.src=url;ER.live=false;commit();queue3D()}
 function cancelStroke(){if(ER.live){ER.cv=null;ER.live=false;dirty=true}}
+function placePiece(pc,X,Y,Wd,Hd,c){const v=P.venue,k=(v.imgW||c.width)/c.width,cpp=v.cmPerPx,cppY=v.cmPerPxY||v.cmPerPx;
+  const it=makeItem('recorte',Math.round((X+Wd/2)*k*cpp),Math.round((Y+Hd/2)*k*cppY),{w:Math.round(Wd*k*cpp),h:Math.round(Hd*k*cppY)});it.src=pc.toDataURL('image/png');ensureImg(it.src);it.label='Pieza del plano';P.items.push(it);return it}
+function holeFill(c,X,Y){return ER.col==='white'?'#FFFFFF':sampleAt(c,{x:Math.max(0,X-3),y:Math.max(0,Y-3)})}
 async function cutPiece(a,b){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const A=w2img({x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)}),B=w2img({x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)});
   const X=clamp(Math.floor(A.x),0,c.width-1),Y=clamp(Math.floor(A.y),0,c.height-1),Wd=clamp(Math.ceil(B.x)-X,1,c.width-X),Hd=clamp(Math.ceil(B.y)-Y,1,c.height-Y);if(Wd<6||Hd<6){toast('Marca un recuadro más grande.');return}
   const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;const px=pc.getContext('2d');px.drawImage(c,X,Y,Wd,Hd,0,0,Wd,Hd);
-  // el blanco del plano se vuelve transparente, así la pieza se ve limpia al moverla
   const id=px.getImageData(0,0,Wd,Hd),d=id.data;for(let i=0;i<d.length;i+=4){const m=Math.min(d[i],d[i+1],d[i+2]);if(m>238)d[i+3]=0;else if(m>205)d[i+3]=Math.round(255*(238-m)/33)}px.putImageData(id,0,0);
-  const fill=ER.col==='white'?'#FFFFFF':sampleAt(c,{x:Math.max(0,X-3),y:Math.max(0,Y-3)});const cx=c.getContext('2d');cx.fillStyle=fill;cx.fillRect(X,Y,Wd,Hd);ER.live=true;
-  const v=P.venue,k=(v.imgW||c.width)/c.width,cpp=v.cmPerPx,cppY=v.cmPerPxY||v.cmPerPx;
-  const it=makeItem('recorte',Math.round((X+Wd/2)*k*cpp),Math.round((Y+Hd/2)*k*cppY),{w:Math.round(Wd*k*cpp),h:Math.round(Hd*k*cppY)});it.src=pc.toDataURL('image/png');ensureImg(it.src);it.label='Pieza del plano';P.items.push(it);
-  await commitPlan();setMode(null);select(it.id);toast('Listo: ya la puedes mover, girar o borrar. Para recortar otra toca las tijeras.')}
+  const cx=c.getContext('2d');cx.fillStyle=holeFill(c,X,Y);cx.fillRect(X,Y,Wd,Hd);ER.live=true;
+  const it=placePiece(pc,X,Y,Wd,Hd,c);await commitPlan();dirty=true;toast('Pieza separada. Recorta más o toca Listo para moverlas.');return it}
+/* Detecta lo dibujado en el plano como manchas separadas (cada mesa con sus sillas = una mancha) */
+let BLOB=null;
+function blobs(){const c=erCanvas();if(!c)return null;if(BLOB&&BLOB.src===ER.src&&BLOB.w===c.width)return BLOB;
+  const M0=Math.max(c.width,c.height),f=Math.min(1,1000/M0),sw=Math.max(1,Math.round(c.width*f)),sh=Math.max(1,Math.round(c.height*f));
+  const t=document.createElement('canvas');t.width=sw;t.height=sh;const tx=t.getContext('2d',{willReadFrequently:true});tx.drawImage(c,0,0,sw,sh);const d=tx.getImageData(0,0,sw,sh).data,N=sw*sh;
+  const m=new Uint8Array(N);for(let i=0;i<N;i++)m[i]=Math.min(d[i*4],d[i*4+1],d[i*4+2])<200?1:0;
+  const R=2,h=new Uint8Array(N),dm=new Uint8Array(N);
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!m[y*sw+x])continue;for(let k=Math.max(0,x-R);k<=Math.min(sw-1,x+R);k++)h[y*sw+k]=1}
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!h[y*sw+x])continue;for(let k=Math.max(0,y-R);k<=Math.min(sh-1,y+R);k++)dm[k*sw+x]=1}
+  const lab=new Int32Array(N),st=new Int32Array(N),comps=[];
+  for(let i0=0;i0<N;i0++){if(!dm[i0]||lab[i0])continue;const id=comps.length+1,q={id,x0:1e9,y0:1e9,x1:-1,y1:-1,n:0};let sp=0;st[sp++]=i0;lab[i0]=id;
+    while(sp){const i=st[--sp],x=i%sw,y=(i-x)/sw;if(x<q.x0)q.x0=x;if(x>q.x1)q.x1=x;if(y<q.y0)q.y0=y;if(y>q.y1)q.y1=y;if(m[i])q.n++;
+      if(x>0&&dm[i-1]&&!lab[i-1]){lab[i-1]=id;st[sp++]=i-1}if(x<sw-1&&dm[i+1]&&!lab[i+1]){lab[i+1]=id;st[sp++]=i+1}
+      if(y>0&&dm[i-sw]&&!lab[i-sw]){lab[i-sw]=id;st[sp++]=i-sw}if(y<sh-1&&dm[i+sw]&&!lab[i+sw]){lab[i+sw]=id;st[sp++]=i+sw}}
+    comps.push(q)}
+  BLOB={src:ER.src,w:c.width,f,sw,sh,lab,comps};return BLOB}
+function cutComp(B,q){const c=erCanvas(),f=B.f,X=clamp(Math.floor(q.x0/f)-1,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-1,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+1-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+1-Y,1,c.height-Y);
+  const cx=c.getContext('2d',{willReadFrequently:true}),fill=holeFill(c,X,Y),src=cx.getImageData(X,Y,Wd,Hd),pd=new ImageData(Wd,Hd),a=src.data,b=pd.data;
+  const fc=document.createElement('canvas').getContext('2d');fc.fillStyle=fill;fc.fillRect(0,0,1,1);const F=fc.getImageData(0,0,1,1).data;
+  for(let py=0;py<Hd;py++){const sy=Math.min(B.sh-1,Math.floor((Y+py)*f));for(let px=0;px<Wd;px++){const sx=Math.min(B.sw-1,Math.floor((X+px)*f));if(B.lab[sy*B.sw+sx]!==q.id)continue;
+    const o=(py*Wd+px)*4,mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>238?0:mn>205?Math.round(255*(238-mn)/33):255;a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
+  cx.putImageData(src,X,Y);const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;pc.getContext('2d').putImageData(pd,0,0);ER.live=true;return placePiece(pc,X,Y,Wd,Hd,c)}
+function tableComps(B){const M=Math.max(B.sw,B.sh),cand=B.comps.filter(q=>{const w=q.x1-q.x0+1,h=q.y1-q.y0+1,mx=Math.max(w,h);return mx>=.018*M&&mx<=.25*M&&Math.min(w,h)/mx>.2&&q.n/(w*h)>.03});
+  return cand.filter(q=>{const w=q.x1-q.x0+1,h=q.y1-q.y0+1;return cand.some(o=>{if(o===q)return false;const ow=o.x1-o.x0+1,oh=o.y1-o.y0+1;return Math.abs(ow-w)/Math.max(ow,w)<.3&&Math.abs(oh-h)/Math.max(oh,h)<.3})})}
+async function autoPieces(){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}toast('Buscando las mesas dibujadas…');await new Promise(r=>setTimeout(r,30));
+  const B=blobs(),L=tableComps(B);if(!L.length){toast('No encontré mesas separadas en el plano. Toca cada mesa con las tijeras o márcala con un recuadro.');setMode('cut');return}
+  for(const q of L)cutComp(B,q);await commitPlan();BLOB=null;setMode(null);dirty=true;
+  toast(`Separé ${L.length} pieza${L.length>1?'s':''} del plano. Ya las puedes mover, girar o borrar. Si falta alguna, usa las tijeras y tócala.`)}
+async function clickCut(w){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const B=blobs(),p=w2img(w),x=Math.floor(p.x*B.f),y=Math.floor(p.y*B.f);let id=0,best=1e9;
+  for(let dy=-8;dy<=8;dy++)for(let dx=-8;dx<=8;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=B.sw||Y>=B.sh)continue;const l=B.lab[Y*B.sw+X];if(l&&dx*dx+dy*dy<best){best=dx*dx+dy*dy;id=l}}
+  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima de la mesa.');return}const q=B.comps[id-1],M=Math.max(B.sw,B.sh);
+  if(Math.max(q.x1-q.x0,q.y1-q.y0)>.4*M){toast('Eso está pegado a las paredes del plano. Márcalo arrastrando un recuadro.');return}
+  cutComp(B,q);await commitPlan();BLOB=null;dirty=true;toast('Pieza separada. Toca otra mesa o Listo para moverlas.')}
 function askPlanTables(img){const sh=gmodal(`<h2>¿El plano ya trae mesas dibujadas?</h2><p class="note">Las puedo convertir en piezas que se mueven.</p>
-   <div class="grid" style="gap:8px;margin-top:14px"><button class="btn primary" id="ptAI">Sí: convertirlas en mesas reales con IA</button><p class="note" style="margin:-4px 0 4px">La IA cuenta las mesas y sillas, las pone en 3D y quita las dibujadas del plano.</p>
-   <button class="btn" id="ptCut">Sí: recortarlas yo para poder moverlas</button><p class="note" style="margin:-4px 0 4px">Marcas cada mesa con un recuadro y se vuelve una pieza movible, tal como está dibujada.</p>
+   <div class="grid" style="gap:8px;margin-top:14px"><button class="btn primary" id="ptAuto">Sí: separarlas en piezas automáticamente</button><p class="note" style="margin:-4px 0 4px">Cada mesa dibujada (con sus sillas) se vuelve una pieza que puedes mover, tal como está en el plano.</p>
+   <button class="btn" id="ptAI">Sí: convertirlas en mesas reales con IA</button><p class="note" style="margin:-4px 0 4px">La IA cuenta las mesas y sillas, las pone en 3D y quita las dibujadas del plano.</p>
+   <button class="btn" id="ptCut">Sí: elegirlas yo una por una</button><p class="note" style="margin:-4px 0 4px">Tocas cada mesa (o la marcas con un recuadro) y se vuelve una pieza movible.</p>
    <button class="btn" id="ptNo">No, el plano está vacío</button></div>`);
-  sh.querySelector('#ptAI').onclick=()=>{gclose();transcribe(null,img)};sh.querySelector('#ptCut').onclick=()=>{gclose();setMode('cut')};sh.querySelector('#ptNo').onclick=gclose}
+  sh.querySelector('#ptAuto').onclick=()=>{gclose();autoPieces()};sh.querySelector('#ptAI').onclick=()=>{gclose();transcribe(null,img)};sh.querySelector('#ptCut').onclick=()=>{gclose();setMode('cut')};sh.querySelector('#ptNo').onclick=gclose}
 
 /* ---------- Lienzo ---------- */
 const cv=$('#cv'),ctx=cv.getContext('2d');let dirty=true,dpr=1;
@@ -813,7 +848,7 @@ function render(){
   drawReview(ctx,view.z);
   if(mode==='erase'&&ER.hover){ctx.save();ctx.strokeStyle='rgba(30,30,30,.8)';ctx.lineWidth=1.5/view.z;ctx.beginPath();ctx.arc(ER.hover.x,ER.hover.y,ER.size/2,0,7);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1/view.z;ctx.beginPath();ctx.arc(ER.hover.x,ER.hover.y,ER.size/2+1.5/view.z,0,7);ctx.stroke();ctx.restore()}
   if(drag&&drag.type==='cut'&&drag.moved){const a=drag.a,b=drag.b;ctx.save();ctx.fillStyle='rgba(169,132,63,.14)';ctx.strokeStyle='#A9843F';ctx.lineWidth=2/view.z;ctx.setLineDash([7/view.z,5/view.z]);ctx.fillRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.restore()}
-  {const hasPlan=P.venue.mode==='image'&&!!P.venue.img,e1=$('#erBtn'),e2=$('#cutBtn');if(e1&&e1.hidden===hasPlan){e1.hidden=!hasPlan;e2.hidden=!hasPlan}if(e1){e1.classList.toggle('on',mode==='erase');e2.classList.toggle('on',mode==='cut')}}
+  {const hasPlan=P.venue.mode==='image'&&!!P.venue.img,e1=$('#erBtn'),e2=$('#cutBtn');if(e1&&e1.hidden===hasPlan){e1.hidden=!hasPlan;e2.hidden=!hasPlan}if(e1){e1.classList.toggle('on',mode==='erase');e2.classList.toggle('on',mode==='cut')}{const hb=$('#handBtn');if(hb)hb.classList.toggle('on',mode==='hand')}}
   if(mode==='refscale'&&REF){const g=css('--gold')||'#A9843F',k=DEFS[REF.it.t].kind;ctx.save();ctx.globalAlpha=.82;drawItem(ctx,REF.it,view.z,{});ctx.restore();
     ctx.save();ctx.translate(REF.it.x,REF.it.y);ctx.rotate(REF.it.r*Math.PI/180);ctx.strokeStyle=g;ctx.lineWidth=2.5/view.z;ctx.setLineDash([7/view.z,5/view.z]);if(TBL.has(k))linenPath(ctx,REF.it,k,0);else{ctx.beginPath();ctx.rect(-24,-24,48,48)}ctx.stroke();ctx.restore()}
   const s=P.items.find(i=>i.id===sel);
@@ -852,6 +887,7 @@ cv.addEventListener('pointerdown',e=>{
   if(ptrs.size>=2){const [a,b]=[...ptrs.values()];pinch={d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),mx:(a.x+b.x)/2,my:(a.y+b.y)/2};
     if(drag&&drag.type==='move'&&drag.moved){drag.it.x=drag.ox;drag.it.y=drag.oy}if(drag&&drag.type==='rot'&&drag.moved)drag.it.r=drag.or;if(drag&&drag.type==='erase')cancelStroke();drag=null;busy=true;dirty=true;return}
   const w=s2w(sx,sy);
+  if(mode==='hand'||KEYSP.on||e.button===1){drag={type:'pan',sx,sy,vx:view.x,vy:view.y};cv.style.cursor='grabbing';return}
   if(mode==='erase'){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}ER.fill=ER.col==='white'?'#FFFFFF':sampleAt(c,w2img(w));drag={type:'erase',last:w,moved:true};eraseLine(w,w);return}
   if(mode==='cut'){drag={type:'cut',a:w,b:w,moved:false};dirty=true;return}
   if(mode==='wall'){WD.pts.push([snap(w.x),snap(w.y)]);dirty=true;updateHint();return}
@@ -880,19 +916,26 @@ cv.addEventListener('pointermove',e=>{
 });
 function endPtr(e){if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(pinch&&ptrs.size<2){pinch=null;if(ptrs.size===1){const p=[...ptrs.values()][0];drag={type:'pan',sx:p.x,sy:p.y,vx:view.x,vy:view.y}}}
-  else if(drag&&drag.type==='erase'){commitPlan()}
-  else if(drag&&drag.type==='cut'){const d=drag;drag=null;if(d.moved)cutPiece(d.a,d.b);dirty=true}
+  if(drag&&drag.type==='pan')cv.style.cursor=(mode==='hand'||KEYSP.on)?'grab':'';
+  if(drag&&drag.type==='erase'){commitPlan()}
+  else if(drag&&drag.type==='cut'){const d=drag;drag=null;const big=Math.abs(d.b.x-d.a.x)*view.z>8||Math.abs(d.b.y-d.a.y)*view.z>8;if(big)cutPiece(d.a,d.b);else clickCut(d.a);dirty=true}
   else if(drag&&drag.moved){commit();if(drag.type==='move')renderEdit()}
   if(!ptrs.size){drag=null;pinch=null;if(busy){busy=false;dirty=true}}}
 cv.addEventListener('pointerleave',()=>{if(ER.hover){ER.hover=null;dirty=true}});
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);cv.addEventListener('lostpointercapture',endPtr);
-cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-clamp(e.deltaY,-120,120)*(e.ctrlKey?.01:.0015)))},{passive:false});
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();
+  // trackpad (dos dedos) mueve el plano; rueda del mouse y pellizco hacen zoom
+  const mouse=e.deltaMode===1||(e.deltaX===0&&Math.abs(e.deltaY)>=50&&Number.isInteger(e.deltaY));
+  if(e.ctrlKey||mouse)zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-clamp(e.deltaY,-120,120)*(e.ctrlKey?.01:.0015)));
+  else{view.x+=e.deltaX/view.z;view.y+=e.deltaY/view.z;dirty=true}},{passive:false});
 cv.addEventListener('dblclick',()=>{if(sel)showTab('edit')});
 $('#zin').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1.25)};
 $('#zout').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(r.width/2,r.height/2,.8)};
 $('#zfit').onclick=fit;
 $('#measure').onclick=()=>setMode(mode==='measure'?null:'measure');
-$('#erBtn').onclick=()=>setMode(mode==='erase'?null:'erase');$('#cutBtn').onclick=()=>setMode(mode==='cut'?null:'cut');
+$('#handBtn').onclick=()=>setMode(mode==='hand'?null:'hand');$('#erBtn').onclick=()=>setMode(mode==='erase'?null:'erase');$('#cutBtn').onclick=()=>setMode(mode==='cut'?null:'cut');
+const KEYSP={on:false};
+document.addEventListener('keyup',e=>{if(e.key===' '&&KEYSP.on){KEYSP.on=false;cv.style.cursor=mode==='hand'?'grab':''}});
 document.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase();const typing=tag==='input'||tag==='textarea'||tag==='select';
   const mod=e.ctrlKey||e.metaKey;
@@ -900,7 +943,12 @@ document.addEventListener('keydown',e=>{
   if(mod&&e.key.toLowerCase()==='y'&&!typing){e.preventDefault();redo();return}
   if(typing)return;
   if(e.key==='Escape'){if(mode)setMode(null);else select(null)}
-  const s=P.items.find(i=>i.id===sel);if(!s)return;
+  if(T3.on)return;
+  if(e.key===' '){e.preventDefault();if(!KEYSP.on){KEYSP.on=true;cv.style.cursor='grab'}return}
+  if(!mod&&(e.key==='+'||e.key==='='||e.key==='-')){e.preventDefault();zoomAt(cv.clientWidth/2,cv.clientHeight/2,e.key==='-'?1/1.25:1.25);return}
+  const s=P.items.find(i=>i.id===sel);
+  if(!s&&e.key.startsWith('Arrow')){e.preventDefault();const st=(e.shiftKey?240:70)/view.z;if(e.key==='ArrowLeft')view.x-=st;if(e.key==='ArrowRight')view.x+=st;if(e.key==='ArrowUp')view.y-=st;if(e.key==='ArrowDown')view.y+=st;dirty=true;return}
+  if(!s)return;
   if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();removeSel()}
   else if(mod&&e.key.toLowerCase()==='d'){e.preventDefault();dupSel()}
   else if(e.key.toLowerCase()==='r'){s.r=(s.r+(e.shiftKey?-15:15)+360)%360;commit();renderEdit()}
@@ -917,7 +965,7 @@ function refItem(t){const P0={r150:['redonda',{w:150,h:150,seats:10}],r180:['red
   const it=makeItem(P0[0],0,0,Object.assign({label:''},P0[1]));if(it.place)it.place.on=false;if(it.center)it.center.type='ninguno';return it}
 function setMode(m){
   if((mode==='refscale'||mode==='calib'||mode==='caparea')&&m!==mode&&CAL&&!CAL.done){restoreCal();dirty=true}
-  mode=m;mpts=[];CAL=null;REF=null;WD.pts=[];ER.hover=null;if(m==='erase'||m==='cut'){if(sel)select(null);if(T3.on)close3D()}
+  mode=m;mpts=[];CAL=null;REF=null;WD.pts=[];ER.hover=null;cv.style.cursor=m==='hand'?'grab':(m==='erase'?'none':(m==='cut'?'crosshair':''));if(m==='erase'||m==='cut'){if(sel)select(null);if(T3.on)close3D()}
   if(m==='calib'||m==='caparea'||m==='refscale')snapCal();
   if(m==='refscale'){const r=cv.getBoundingClientRect(),c=s2w(r.width/2,r.height/2),it=refItem('r150');it.x=c.x;it.y=c.y;REF={t:'r150',it,u:c.x/P.venue.cmPerPx,v:c.y/(P.venue.cmPerPxY||P.venue.cmPerPx),s:0};if(sel)select(null)}
   $('#measure').classList.toggle('on',m==='measure');updateHint();dirty=true}
@@ -937,7 +985,8 @@ function updateHint(){const h=$('#hint');const btnX=t=>`<button class="btn sm" i
     $('#wdT').onchange=e=>{WD.t=e.target.value;dirty=true};const u=$('#wdU');if(u)u.onclick=()=>{WD.pts.pop();dirty=true;updateHint()};const k=$('#wdOk');if(k)k.onclick=finishWall}
   else if(mode==='erase'){h.hidden=false;h.innerHTML=`<span>Pasa el borrador sobre el plano.</span><label for="erS">Tamaño</label><input type="range" id="erS" min="10" max="500" step="5" value="${ER.size}" style="width:120px"><select id="erC" style="width:auto"><option value="white" ${ER.col==='white'?'selected':''}>Borrar con blanco</option><option value="sample" ${ER.col==='sample'?'selected':''}>Con el color del plano</option></select><button class="btn sm" id="erU">Deshacer</button>${btnX('Listo')}`;
     $('#erS').oninput=e=>{ER.size=+e.target.value;dirty=true};$('#erC').onchange=e=>{ER.col=e.target.value};$('#erU').onclick=()=>undo()}
-  else if(mode==='cut'){h.hidden=false;h.innerHTML=`<span>Marca con un recuadro la mesa u objeto dibujado en el plano.</span><select id="erC" style="width:auto"><option value="white" ${ER.col==='white'?'selected':''}>El hueco queda en blanco</option><option value="sample" ${ER.col==='sample'?'selected':''}>El hueco toma el color del plano</option></select>${btnX('Cancelar')}`;$('#erC').onchange=e=>{ER.col=e.target.value}}
+  else if(mode==='cut'){h.hidden=false;h.innerHTML=`<span>Toca una mesa dibujada para separarla, o arrastra un recuadro.</span><button class="btn sm primary" id="cutAll">Separar todas</button><select id="erC" style="width:auto"><option value="white" ${ER.col==='white'?'selected':''}>El hueco queda en blanco</option><option value="sample" ${ER.col==='sample'?'selected':''}>El hueco toma el color del plano</option></select>${btnX('Listo')}`;$('#erC').onchange=e=>{ER.col=e.target.value};$('#cutAll').onclick=()=>autoPieces()}
+  else if(mode==='hand'){h.hidden=false;h.innerHTML=`<span>Arrastra para mover el plano. Rueda o pellizco para acercar. También con las flechas del teclado.</span>${btnX('Listo')}`}
   else if(mode==='walldel'){h.hidden=false;h.innerHTML='<span>Toca la pared que quieres quitar.</span>'+btnX('Listo')}
   else h.hidden=true;
   const hx=$('#hx');if(hx)hx.onclick=()=>{if(mode==='wall')finishWall();setMode(null)};
