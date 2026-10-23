@@ -32,6 +32,8 @@ const TOOL = {
         sillas_total: { type: 'integer' },
         punto_sillas: { ...PT, description: 'Si solo hay sillas de un lado: posición de una de esas sillas' }
       }, required: ['forma', 'centro', 'sillas_total'] } },
+      sillas_sueltas: { type: 'array', description: 'Sillas dibujadas que NO están alrededor de una mesa (sillas sueltas, de lounge, de ceremonia en filas, de recepción). Una entrada por silla.', items: { type: 'object', properties: {
+        centro: PT, frente: { ...PT, description: 'Un punto hacia donde mira el frente de la silla (opcional)' } }, required: ['centro'] } },
       elementos: { type: 'array', description: 'Pista, escenario, barra, DJ, entrada, etc. Rectángulo que ocupan, en porcentaje.', items: { type: 'object', properties: {
         tipo: { type: 'string', enum: ZONAS }, x0: { type: 'number' }, y0: { type: 'number' }, x1: { type: 'number' }, y1: { type: 'number' }, etiqueta: { type: ['string', 'null'] },
         paisajismo: { type: 'boolean', description: 'true si es vegetación o jardinería que ya forma parte del lugar (símbolos de arbustos o árboles del plano arquitectónico), no decoración del evento' } }, required: ['tipo', 'x0', 'y0', 'x1', 'y1'] } },
@@ -59,6 +61,7 @@ Registra con la herramienta:
    - Si una mesa tiene sillas de un solo lado, da punto_sillas con la posición de una de esas sillas.
    - ancho_pct es el lado corto de la mesa sin sillas, en porcentaje del ancho de la imagen.
    - Si es un plano arquitectónico SIN mesas de evento, deja mesas vacío. No confundas muebles fijos, barras de bar, mostradores, escaleras ni rellenos de color con mesas.
+1b. Las SILLAS SUELTAS: cada silla dibujada que no está alrededor de una mesa va en sillas_sueltas, una por una, con su centro. Las sillas de las mesas NO van aquí (se cuentan en la mesa).
 2. Los MUROS del área: sigue con líneas las paredes, ventanales, barandales y muretes dibujados (perímetro y muros interiores). Para muros curvos usa varios puntos que sigan la curva. Deja huecos donde hay puertas o accesos. Usa la línea central del muro. No traces textos, cotas, flechas, ejes, achurados, rellenos de color, escaleras ni el mobiliario.
 3. Las COTAS: si hay líneas de medida con un número (por ejemplo 10.36), registra sus dos extremos y los metros. Si hay medidas escritas del salón, ponlas también en salon.
 4. Los ELEMENTOS de evento que no son mesas (pista, escenario, barra, DJ, entrada, lounge, pérgolas, carpas, guirnaldas de luces, farolas, sombrillas, fogatas) con el rectángulo que ocupan. No registres paredes aquí (van en muros).
