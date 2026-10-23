@@ -93,6 +93,14 @@ const ESTILO_PROMPT = `Eres asistente de una wedding planner en México. La foto
 - Si algo de la foto no está igual en el catálogo, elige lo más parecido y explícalo en "aproximaciones" (por ejemplo: "La servilleta tiene doblez de rosa; puse abanico").
 - Si algo no se ve en la foto, omite ese campo.
 Responde únicamente llamando a la herramienta registrar_estilo.`;
+const SILLA_TOOL = c => ({ name: 'registrar_silla', description: 'Describe la silla de la foto para recrearla en la app.', input_schema: { type: 'object', properties: {
+  nombre: { type: 'string', description: 'Nombre corto y claro de la silla, como lo diría una wedding planner (por ejemplo "Crossback madera clara")' },
+  base: { ...en((c && c.chairs) || []), description: 'El modelo del catálogo con la forma más parecida' },
+  color: { ...HEX, description: 'Color principal del armazón de la silla' },
+  cojin: { ...HEX, description: 'Color del cojín si tiene; null si no tiene' },
+  diferencias: { type: 'string', description: 'En una frase, en qué se diferencia la silla real del modelo base elegido' }
+}, required: ['nombre', 'base', 'color'] } });
+const SILLA_PROMPT = `Eres asistente de una wedding planner en México. La foto muestra una silla de ejemplo para un evento. Elige el modelo del catálogo con la forma más parecida, el color real del armazón en hex y el del cojín si tiene. Dale un nombre corto. Responde únicamente llamando a la herramienta registrar_silla.`;
 const PISO_OPC = ['', 'pasto', 'arena', 'adoquin', 'deck', 'marmolpiso', 'concreto', 'grava', 'piedra', 'tierra', 'alfombra'];
 const LUGAR_TOOL = { name: 'registrar_ambiente', description: 'Registra el ambiente del lugar de la foto.', input_schema: { type: 'object', properties: {
   tipo_lugar: { type: 'string', enum: ['salon', 'aire', 'terraza', 'barda'], description: 'salon = cerrado con paredes; aire = al aire libre; terraza = con barandal; barda = jardín con muro bajo' },
@@ -122,9 +130,9 @@ module.exports = async (req, res) => {
   if (String(body.codigo || '').trim() !== String(code).trim()) return send(401, { error: 'Código incorrecto.', needCode: true });
   if (!body.b64 || !/^image\/(jpeg|png|webp)$/.test(body.mime || '')) return send(400, { error: 'No llegó la imagen del layout.' });
 
-  const modo = body.modo === 'estilo' ? 'estilo' : body.modo === 'lugar' ? 'lugar' : 'layout';
-  const tool = modo === 'estilo' ? estiloTool(body.catalogo) : modo === 'lugar' ? LUGAR_TOOL : TOOL;
-  const text = modo === 'estilo' ? ESTILO_PROMPT : modo === 'lugar' ? LUGAR_PROMPT : PROMPT;
+  const modo = ['estilo', 'lugar', 'silla'].includes(body.modo) ? body.modo : 'layout';
+  const tool = modo === 'estilo' ? estiloTool(body.catalogo) : modo === 'lugar' ? LUGAR_TOOL : modo === 'silla' ? SILLA_TOOL(body.catalogo) : TOOL;
+  const text = modo === 'estilo' ? ESTILO_PROMPT : modo === 'lugar' ? LUGAR_PROMPT : modo === 'silla' ? SILLA_PROMPT : PROMPT;
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },

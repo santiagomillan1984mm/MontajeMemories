@@ -107,6 +107,11 @@ input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
 .stepper button{border:0;background:var(--surface-2);width:34px;height:34px;font-size:18px}
 .stepper input{border:0;border-radius:0;width:56px;text-align:center;background:var(--surface);font-variant-numeric:tabular-nums}
 .sw{display:flex;flex-wrap:wrap;gap:6px}
+.chgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.chc{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 4px 7px;border:1px solid var(--line,#ddd);border-radius:10px;background:#fff;font:500 11px/1.2 inherit;color:var(--ink);text-align:center;cursor:pointer}
+.chc.up{justify-content:center;border-style:dashed;color:var(--accent,#2F5D46)}.chc .plus{width:64px;height:64px;display:flex;align-items:center;justify-content:center;font-size:30px;line-height:1;border-radius:7px;background:#F4F2EC}
+.chc img{width:64px;height:64px;border-radius:7px;background:#D9D3C7;object-fit:cover}
+.chc[aria-pressed="true"]{border-color:var(--accent,#2F5D46);box-shadow:0 0 0 2px var(--accent-soft,#dfe9e2)}
 .sw button{width:26px;height:26px;border-radius:50%;border:1px solid rgba(0,0,0,.18);padding:0}
 .sw button[aria-pressed="true"]{outline:2px solid var(--gold);outline-offset:2px}
 .sw .none{background:repeating-linear-gradient(45deg,var(--surface-2) 0 4px,var(--line) 4px 6px)}
@@ -296,6 +301,8 @@ const OVERLAYS=[['','Sin sobremantel'],['encaje','Encaje'],['gasa','Gasa / organ
 const RUNNERS=[['','Sin camino'],['tela','Tela lisa'],['lino','Lino'],['gasa','Gasa (caída suelta)'],['terciopelo','Terciopelo'],['encaje','Encaje'],['yute','Yute'],['lentejuela','Lentejuela'],['follaje','Guirnalda de follaje']];
 const CHAIRS=[['tiffany','Tiffany / Chiavari'],['crossback','Crossback'],['thonet','Thonet'],['versalles','Versalles'],['napoleon','Napoleón'],['phoenix','Phoenix'],['ghost','Ghost (acrílico)'],['luisxv','Luis XV'],['ratan','Ratán'],['acapulco','Acapulco'],['equipal','Equipal'],['plegable','Plegable'],['banco','Banco / banca']];
 const chairName=k=>nm(CHAIRS,k);
+const myChairs=()=>(P.settings&&P.settings.chairsCustom)||[];
+const chairNm=ch=>{const c=ch&&ch.custom&&myChairs().find(x=>x.id===ch.custom);return c?c.name:chairName(ch.type)};
 const CHAIRCOL=[['Dorado','#C9A44C'],['Plata','#B8BEC5'],['Oro rosa','#D9A893'],['Blanco','#F3F1EC'],['Natural','#B88B5B'],['Nogal','#6E4A30'],['Chocolate','#5B3A27'],['Negro','#2A2A2A'],['Transparente','rgba(190,214,232,.55)'],['Gris','#9A9DA1'],['Verde','#5F7A5A'],['Rosa','#E8A2B4']];
 const chairHex=n=>n&&n[0]==='#'?n:(CHAIRCOL.find(c=>c[0]===n)||CHAIRCOL[0])[1];
 const CHAIRDECO=[['','Ninguna'],['mono','Moño de tela'],['follaje','Follaje en el respaldo'],['flor','Flor en el respaldo'],['funda','Funda completa']];
@@ -437,11 +444,15 @@ function chairCount(o){const k=DEFS[o.t]&&DEFS[o.t].kind;if(TBL.has(k))return o.
 function chairAll(ch){let n=0;for(const o of P.items){if(!o.chair||!chairCount(o))continue;o.chair=clone(ch);delete o.seatCh;n+=chairCount(o)}commit();renderEdit();toast(`Listo: ${n} silla${n===1?'':'s'} con el mismo estilo.`)}
 function openSeat(it,i){SEAT={id:it.id,i};dirty=true;const cur=clone(seatCh(it,i)),own=!!(it.seatCh&&it.seatCh[i]);
   const sh=gmodal(`<h2>Silla ${i+1} · ${esc(it.label||DEFS[it.t].name)}</h2><p class="note">Cambia solo esta silla, toda la mesa o todas las sillas del evento.</p>
-   <div class="field"><label for="stT">Modelo</label><select id="stT">${opts(CHAIRS,cur.type)}</select></div>
+   <div class="field"><label>Modelo</label>${chairGrid(cur,'st')}</div>
    <div class="field"><label>Color</label><div class="sw" id="stC">${CHAIRCOL.map(([n,hx])=>`<button type="button" data-v="${esc(n)}" aria-pressed="${cur.color===n}" title="${esc(n)}" aria-label="${esc(n)}" style="background:${hx}"></button>`).join('')}</div></div>
    <div class="actions" style="flex-wrap:wrap;gap:8px">${own?'<button class="btn" id="stR">Igual que la mesa</button>':''}<button class="btn" id="stAll">Todas las sillas del evento</button><button class="btn" id="stTbl">Toda esta mesa</button><button class="btn primary" id="stOne">Solo esta silla</button></div>`);
-  sh.querySelectorAll('#stC button').forEach(b=>b.onclick=()=>{cur.color=b.dataset.v;sh.querySelectorAll('#stC button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
-  const rd=()=>{cur.type=sh.querySelector('#stT').value;return cur};const done=()=>{gclose();SEAT=null;dirty=true};
+  const press=b=>sh.querySelectorAll('.chgrid [data-ct],.chgrid [data-cc]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  sh.querySelectorAll('.chgrid [data-ct]').forEach(b=>b.onclick=()=>{cur.type=b.dataset.ct;delete cur.custom;press(b)});
+  sh.querySelectorAll('.chgrid [data-cc]').forEach(b=>b.onclick=()=>{const c=myChairs().find(x=>x.id===b.dataset.cc);if(c){applyMine(cur,c);press(b)}});
+  sh.querySelectorAll('.chgrid [data-cup]').forEach(b=>b.onclick=()=>{gclose();SEAT=null;chairFromPhoto((c,all)=>{if(all)chairAllStyle(c);else{it.seatCh=it.seatCh||{};const ch=clone(seatCh(it,i));applyMine(ch,c);it.seatCh[i]=ch;commit();renderEdit();toast('Silla cambiada.')}})});fillThumbs(sh,cur.color);
+  sh.querySelectorAll('#stC button').forEach(b=>b.onclick=()=>{cur.color=b.dataset.v;delete cur.custom;fillThumbs(sh,cur.color);sh.querySelectorAll('#stC button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
+  const rd=()=>cur;const done=()=>{gclose();SEAT=null;dirty=true};
   sh.querySelector('#stOne').onclick=()=>{it.seatCh=it.seatCh||{};it.seatCh[i]=clone(rd());commit();renderEdit();done();toast('Silla cambiada.')};
   sh.querySelector('#stTbl').onclick=()=>{it.chair=clone(rd());delete it.seatCh;commit();renderEdit();done();toast('Sillas de la mesa cambiadas.')};
   sh.querySelector('#stAll').onclick=()=>{done();chairAll(rd())};
@@ -807,44 +818,63 @@ function holeFill(c,X,Y){return ER.col==='white'?'#FFFFFF':sampleAt(c,{x:Math.ma
 async function cutPiece(a,b){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const A=w2img({x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)}),B=w2img({x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)});
   const X=clamp(Math.floor(A.x),0,c.width-1),Y=clamp(Math.floor(A.y),0,c.height-1),Wd=clamp(Math.ceil(B.x)-X,1,c.width-X),Hd=clamp(Math.ceil(B.y)-Y,1,c.height-Y);if(Wd<6||Hd<6){toast('Marca un recuadro más grande.');return}
   const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;const px=pc.getContext('2d');px.drawImage(c,X,Y,Wd,Hd,0,0,Wd,Hd);
-  const id=px.getImageData(0,0,Wd,Hd),d=id.data;for(let i=0;i<d.length;i+=4){const m=Math.min(d[i],d[i+1],d[i+2]);if(m>238)d[i+3]=0;else if(m>205)d[i+3]=Math.round(255*(238-m)/33)}px.putImageData(id,0,0);
+  const id=px.getImageData(0,0,Wd,Hd),d=id.data;for(let i=0;i<d.length;i+=4){const m=Math.min(d[i],d[i+1],d[i+2]);if(m>247)d[i+3]=0;else if(m>236)d[i+3]=Math.round(255*(247-m)/11)}px.putImageData(id,0,0);
   const cx=c.getContext('2d');cx.fillStyle=holeFill(c,X,Y);cx.fillRect(X,Y,Wd,Hd);ER.live=true;
   const it=placePiece(pc,X,Y,Wd,Hd,c);await commitPlan();dirty=true;toast('Pieza separada. Recorta más o toca Listo para moverlas.');return it}
 /* Detecta lo dibujado en el plano como manchas separadas (cada mesa con sus sillas = una mancha) */
 let BLOB=null;
 function blobs(){const c=erCanvas();if(!c)return null;if(BLOB&&BLOB.src===ER.src&&BLOB.w===c.width)return BLOB;
-  const M0=Math.max(c.width,c.height),f=Math.min(1,1000/M0),sw=Math.max(1,Math.round(c.width*f)),sh=Math.max(1,Math.round(c.height*f));
-  const t=document.createElement('canvas');t.width=sw;t.height=sh;const tx=t.getContext('2d',{willReadFrequently:true});tx.drawImage(c,0,0,sw,sh);const d=tx.getImageData(0,0,sw,sh).data,N=sw*sh;
-  const m=new Uint8Array(N);for(let i=0;i<N;i++)m[i]=Math.min(d[i*4],d[i*4+1],d[i*4+2])<200?1:0;
-  const R=2,h=new Uint8Array(N),dm=new Uint8Array(N);
+  const M0=Math.max(c.width,c.height),f=Math.min(1,1600/M0),sw=Math.max(1,Math.round(c.width*f)),sh=Math.max(1,Math.round(c.height*f));
+  const t=document.createElement('canvas');t.width=sw;t.height=sh;const tx=t.getContext('2d',{willReadFrequently:true});tx.fillStyle='#fff';tx.fillRect(0,0,sw,sh);tx.drawImage(c,0,0,sw,sh);const d=tx.getImageData(0,0,sw,sh).data,N=sw*sh;
+  // tinta = todo lo que no es blanco, incluidas las sillas en gris clarito
+  const m=new Uint8Array(N);for(let i=0;i<N;i++)m[i]=Math.min(d[i*4],d[i*4+1],d[i*4+2])<237?1:0;
+  const R=1,h=new Uint8Array(N),dm=new Uint8Array(N);
   for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!m[y*sw+x])continue;for(let k=Math.max(0,x-R);k<=Math.min(sw-1,x+R);k++)h[y*sw+k]=1}
   for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!h[y*sw+x])continue;for(let k=Math.max(0,y-R);k<=Math.min(sh-1,y+R);k++)dm[k*sw+x]=1}
   const lab=new Int32Array(N),st=new Int32Array(N),comps=[];
-  for(let i0=0;i0<N;i0++){if(!dm[i0]||lab[i0])continue;const id=comps.length+1,q={id,x0:1e9,y0:1e9,x1:-1,y1:-1,n:0};let sp=0;st[sp++]=i0;lab[i0]=id;
-    while(sp){const i=st[--sp],x=i%sw,y=(i-x)/sw;if(x<q.x0)q.x0=x;if(x>q.x1)q.x1=x;if(y<q.y0)q.y0=y;if(y>q.y1)q.y1=y;if(m[i])q.n++;
+  for(let i0=0;i0<N;i0++){if(!dm[i0]||lab[i0])continue;const id=comps.length+1,q={id,x0:1e9,y0:1e9,x1:-1,y1:-1,n:0,r:0,g:0,b:0};let sp=0;st[sp++]=i0;lab[i0]=id;
+    while(sp){const i=st[--sp],x=i%sw,y=(i-x)/sw;if(x<q.x0)q.x0=x;if(x>q.x1)q.x1=x;if(y<q.y0)q.y0=y;if(y>q.y1)q.y1=y;if(m[i]){q.n++;q.r+=d[i*4];q.g+=d[i*4+1];q.b+=d[i*4+2]}
       if(x>0&&dm[i-1]&&!lab[i-1]){lab[i-1]=id;st[sp++]=i-1}if(x<sw-1&&dm[i+1]&&!lab[i+1]){lab[i+1]=id;st[sp++]=i+1}
       if(y>0&&dm[i-sw]&&!lab[i-sw]){lab[i-sw]=id;st[sp++]=i-sw}if(y<sh-1&&dm[i+sw]&&!lab[i+sw]){lab[i+sw]=id;st[sp++]=i+sw}}
-    comps.push(q)}
+    if(q.n){q.r/=q.n;q.g/=q.n;q.b/=q.n}q.w=q.x1-q.x0+1;q.h=q.y1-q.y0+1;comps.push(q)}
   BLOB={src:ER.src,w:c.width,f,sw,sh,lab,comps};return BLOB}
-function cutComp(B,q){const c=erCanvas(),f=B.f,X=clamp(Math.floor(q.x0/f)-1,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-1,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+1-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+1-Y,1,c.height-Y);
+// cm que mide un pixel de la imagen de trabajo
+function blobCm(B){const v=P.venue,c=ER.cv,k=(v.imgW||c.width)/c.width;return {x:v.cmPerPx*k/B.f,y:(v.cmPerPxY||v.cmPerPx)*k/B.f}}
+const isVeg=q=>(q.g>q.r+18&&q.g>q.b+8)||(q.b>q.r+40&&q.b>q.g+10);
+function isChairBlob(B,q){const u=blobCm(B),W=q.w*u.x,H=q.h*u.y,mx=Math.max(W,H),mn=Math.min(W,H);return mx>=28&&mx<=90&&mn>=20&&mn/mx>.5&&!isVeg(q)}
+function textIds(L){// letras: van en renglón, pegadas y de anchos distintos; las sillas en fila son todas iguales
+  const par=new Map(L.map(q=>[q.id,q.id])),fd=x=>{while(par.get(x)!==x)x=par.get(x);return x};const S=[...L].sort((a,b)=>a.x0-b.x0);
+  for(let a=0;a<S.length;a++){const q=S[a];for(let b=a+1;b<S.length;b++){const o=S[b];if(o.x0-q.x1>.7*q.h)break;if(o.x0<=q.x1-2)continue;if(Math.abs(o.y1-q.y1)<.3*Math.max(q.h,o.h)&&o.h/q.h<2.6&&q.h/o.h<2.6)par.set(fd(o.id),fd(q.id))}}
+  const G=new Map();for(const q of L){const r=fd(q.id);if(!G.has(r))G.set(r,[]);G.get(r).push(q)}const out=new Set();
+  const cv=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;return Math.sqrt(a.reduce((x,y)=>x+(y-mu)**2,0)/a.length)/(mu||1)};
+  for(const g of G.values())if(g.length>=3&&(cv(g.map(q=>q.w))>.2||cv(g.map(q=>q.h))>.2))for(const q of g)out.add(q.id);return out}
+function cutComp(B,q,asChair){const c=erCanvas(),f=B.f,X=clamp(Math.floor(q.x0/f)-1,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-1,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+1-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+1-Y,1,c.height-Y);
   const cx=c.getContext('2d',{willReadFrequently:true}),fill=holeFill(c,X,Y),src=cx.getImageData(X,Y,Wd,Hd),pd=new ImageData(Wd,Hd),a=src.data,b=pd.data;
   const fc=document.createElement('canvas').getContext('2d');fc.fillStyle=fill;fc.fillRect(0,0,1,1);const F=fc.getImageData(0,0,1,1).data;
   for(let py=0;py<Hd;py++){const sy=Math.min(B.sh-1,Math.floor((Y+py)*f));for(let px=0;px<Wd;px++){const sx=Math.min(B.sw-1,Math.floor((X+px)*f));if(B.lab[sy*B.sw+sx]!==q.id)continue;
-    const o=(py*Wd+px)*4,mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>238?0:mn>205?Math.round(255*(238-mn)/33):255;a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
-  cx.putImageData(src,X,Y);const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;pc.getContext('2d').putImageData(pd,0,0);ER.live=true;return placePiece(pc,X,Y,Wd,Hd,c)}
-function tableComps(B){const M=Math.max(B.sw,B.sh),cand=B.comps.filter(q=>{const w=q.x1-q.x0+1,h=q.y1-q.y0+1,mx=Math.max(w,h);return mx>=.018*M&&mx<=.25*M&&Math.min(w,h)/mx>.2&&q.n/(w*h)>.03});
-  return cand.filter(q=>{const w=q.x1-q.x0+1,h=q.y1-q.y0+1;return cand.some(o=>{if(o===q)return false;const ow=o.x1-o.x0+1,oh=o.y1-o.y0+1;return Math.abs(ow-w)/Math.max(ow,w)<.3&&Math.abs(oh-h)/Math.max(oh,h)<.3})})}
-async function autoPieces(){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}toast('Buscando las mesas dibujadas…');await new Promise(r=>setTimeout(r,30));
-  const B=blobs(),L=tableComps(B);if(!L.length){toast('No encontré mesas separadas en el plano. Toca cada mesa con las tijeras o márcala con un recuadro.');setMode('cut');return}
-  for(const q of L)cutComp(B,q);await commitPlan();BLOB=null;setMode(null);dirty=true;
-  toast(`Separé ${L.length} pieza${L.length>1?'s':''} del plano. Ya las puedes mover, girar o borrar. Si falta alguna, usa las tijeras y tócala.`)}
+    const o=(py*Wd+px)*4,mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>247?0:mn>236?Math.round(255*(247-mn)/11):255;a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
+  cx.putImageData(src,X,Y);ER.live=true;
+  if(asChair){const v=P.venue,k=(v.imgW||c.width)/c.width,it=makeItem('silla',Math.round((X+Wd/2)*k*v.cmPerPx),Math.round((Y+Hd/2)*k*(v.cmPerPxY||v.cmPerPx)));P.items.push(it);return it}
+  const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;pc.getContext('2d').putImageData(pd,0,0);return placePiece(pc,X,Y,Wd,Hd,c)}
+function tableComps(B){const M=Math.max(B.sw,B.sh),u=blobCm(B);
+  const cand=B.comps.filter(q=>{const mx=Math.max(q.w,q.h);return mx>=4&&mx<=.25*M&&Math.min(q.w,q.h)/mx>.2&&q.n/(q.w*q.h)>.03&&!isVeg(q)});
+  const txt=textIds(cand.filter(q=>Math.max(q.w*u.x,q.h*u.y)<150));
+  const sim=(q,o)=>Math.abs(o.w-q.w)/Math.max(o.w,q.w)<.3&&Math.abs(o.h-q.h)/Math.max(o.h,q.h)<.3;
+  return cand.filter(q=>!txt.has(q.id)&&(isChairBlob(B,q)||Math.max(q.w,q.h)>=.012*M)&&cand.some(o=>o!==q&&!txt.has(o.id)&&sim(q,o))).map(q=>({q,chair:isChairBlob(B,q)}))}
+async function autoPieces(){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}toast('Buscando las mesas y sillas dibujadas…');await new Promise(r=>setTimeout(r,30));
+  const B=blobs(),L=tableComps(B);if(!L.length){toast('No encontré mesas ni sillas separadas en el plano. Toca cada una con las tijeras o márcala con un recuadro.');setMode('cut');return}
+  let nc=0,np=0;const CH=[],PC=[];for(const {q,chair} of L){const it=cutComp(B,q,chair);(chair?CH:PC).push(it);chair?nc++:np++}
+  // cada silla mira hacia la mesa que tiene al lado
+  for(const ch of CH){let best=null,bd=1e9;for(const t of PC){const d=Math.hypot(t.x-ch.x,t.y-ch.y);if(d<Math.max(t.w,t.h)/2+90&&d<bd){bd=d;best=t}}if(best)ch.r=Math.round(((Math.atan2(best.x-ch.x,-(best.y-ch.y))*180/Math.PI)%360+360)%360)}await commitPlan();BLOB=null;setMode(null);dirty=true;
+  const parts=[];if(nc)parts.push(`${nc} silla${nc>1?'s':''}`);if(np)parts.push(`${np} pieza${np>1?'s':''}`);
+  toast(`Separé ${parts.join(' y ')} del plano. Toca una silla para cambiarle el estilo. Si falta algo, usa las tijeras y tócalo.`)}
 async function clickCut(w){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const B=blobs(),p=w2img(w),x=Math.floor(p.x*B.f),y=Math.floor(p.y*B.f);let id=0,best=1e9;
   for(let dy=-8;dy<=8;dy++)for(let dx=-8;dx<=8;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=B.sw||Y>=B.sh)continue;const l=B.lab[Y*B.sw+X];if(l&&dx*dx+dy*dy<best){best=dx*dx+dy*dy;id=l}}
-  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima de la mesa.');return}const q=B.comps[id-1],M=Math.max(B.sw,B.sh);
-  if(Math.max(q.x1-q.x0,q.y1-q.y0)>.4*M){toast('Eso está pegado a las paredes del plano. Márcalo arrastrando un recuadro.');return}
-  cutComp(B,q);await commitPlan();BLOB=null;dirty=true;toast('Pieza separada. Toca otra mesa o Listo para moverlas.')}
-function askPlanTables(img){const sh=gmodal(`<h2>¿El plano ya trae mesas dibujadas?</h2><p class="note">Las puedo convertir en piezas que se mueven.</p>
-   <div class="grid" style="gap:8px;margin-top:14px"><button class="btn primary" id="ptAuto">Sí: separarlas en piezas automáticamente</button><p class="note" style="margin:-4px 0 4px">Cada mesa dibujada (con sus sillas) se vuelve una pieza que puedes mover, tal como está en el plano.</p>
+  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima.');return}const q=B.comps[id-1],M=Math.max(B.sw,B.sh);
+  if(Math.max(q.w,q.h)>.4*M){toast('Eso está pegado a las paredes del plano. Márcalo arrastrando un recuadro.');return}
+  const chair=isChairBlob(B,q);cutComp(B,q,chair);await commitPlan();BLOB=null;dirty=true;toast(chair?'Silla separada. Toca otra o Listo; luego tócala para elegir su estilo.':'Pieza separada. Toca otra o Listo para moverlas.')}
+function askPlanTables(img){const sh=gmodal(`<h2>¿El plano ya trae mesas dibujadas?</h2><p class="note">Las puedo convertir en mesas y sillas que se mueven.</p>
+   <div class="grid" style="gap:8px;margin-top:14px"><button class="btn primary" id="ptAuto">Sí: separarlas automáticamente</button><p class="note" style="margin:-4px 0 4px">Cada silla dibujada se vuelve una silla real a la que le eliges el estilo; las mesas y otros objetos quedan como piezas movibles.</p>
    <button class="btn" id="ptAI">Sí: convertirlas en mesas reales con IA</button><p class="note" style="margin:-4px 0 4px">La IA cuenta las mesas y sillas, las pone en 3D y quita las dibujadas del plano.</p>
    <button class="btn" id="ptCut">Sí: elegirlas yo una por una</button><p class="note" style="margin:-4px 0 4px">Tocas cada mesa (o la marcas con un recuadro) y se vuelve una pieza movible.</p>
    <button class="btn" id="ptNo">No, el plano está vacío</button></div>`);
@@ -1097,9 +1127,31 @@ function swatches(path,list,cur,allowNone,noneLbl){const toHex=v=>{const h=list=
 function palChips(cur,colors){return `<div class="sw">${colors&&colors.length?`<button type="button" data-sw="center.palette" data-v="De la foto" style="background:linear-gradient(135deg,${colors.map((c,i)=>`${c} ${Math.round(i*100/colors.length)}% ${Math.round((i+1)*100/colors.length)}%`).join(',')})" title="De la foto" aria-label="De la foto" aria-pressed="${cur==='De la foto'}"></button>`:''}${FPAL.map(([n,cs])=>`<button type="button" data-sw="center.palette" data-v="${esc(n)}" style="background:linear-gradient(135deg,${cs.map((c,i)=>`${c} ${Math.round(i*100/cs.length)}% ${Math.round((i+1)*100/cs.length)}%`).join(',')})" title="${esc(n)}" aria-label="${esc(n)}" aria-pressed="${cur===n}"></button>`).join('')}</div><span class="swname">${esc(cur)}</span>`}
 function opts(list,cur){return list.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(cur)?'selected':''}>${n}</option>`).join('')}
 function num(path,val,step,min,lbl,unit){return `<div class="field"><label>${lbl}${unit?` <span class="muted">(${unit})</span>`:''}</label><input type="number" data-k="${path}" data-unit="${unit||''}" step="${step}" min="${min}" value="${unit==='m'?(val/100).toFixed(2):val}"></div>`}
-const openSec=new Set(['mesa']);
+const openSec=new Set(['mesa','silla']);
 function sec(id,title,body){return `<details data-sec="${id}" ${openSec.has(id)?'open':''}><summary>${title}</summary><div class="secb">${body}</div></details>`}
-function chairFields(ch){return `<div class="field"><label>Modelo</label><select data-k="chair.type">${opts(CHAIRS,ch.type)}</select></div><div class="field"><label>Color de la silla</label>${swatches('chair.color',CHAIRCOL,ch.color)}</div><div class="field"><label>Cojín</label>${swatches('chair.cushion',LINENS,ch.cushion,true,'Sin cojín')}</div><div class="field"><label>Decoración en la silla</label><select data-k="chair.deco">${opts(CHAIRDECO,ch.deco||'')}</select></div>${ch.deco?`<div class="field"><label>Color de la decoración</label>${swatches('chair.decoColor',LINENS,ch.decoColor)}</div>`:''}`}
+function chairGrid(ch,sid){return `<div class="chgrid" data-chg="${sid||''}">${CHAIRS.map(([k,n])=>`<button type="button" class="chc" data-ct="${k}" aria-pressed="${!ch.custom&&k===ch.type}"><img data-thumb="${k}" alt="" width="64" height="64"><span>${esc(n)}</span></button>`).join('')}
+  ${myChairs().map(c=>`<button type="button" class="chc mine" data-cc="${c.id}" aria-pressed="${ch.custom===c.id}"><img src="${c.photo}" alt="" width="64" height="64"><span>${esc(c.name)}</span></button>`).join('')}
+  <button type="button" class="chc up" data-cup="1"><span class="plus">+</span><span>Subir ejemplo</span></button></div><p class="note" style="margin-top:6px">¿No está la silla que necesitas? Toca <b>Subir ejemplo</b> con una foto y la app crea una igual.</p>`}
+const applyMine=(dst,c)=>{dst.type=c.base;dst.color=c.color;dst.cushion=c.cushion||'';dst.deco='';dst.custom=c.id};
+async function chairFromPhoto(done){const f=await pickPhoto();if(!f)return;let img;try{img=await fileToImg(f,1600)}catch(e){toast('No se pudo abrir esa foto. Prueba con JPG o PNG.');return}
+  let a;try{a=await callLayout(photoURL(img,1200).split(',')[1],()=>waitModal('La IA está viendo la silla…'),{modo:'silla',catalogo:catalogo()})}catch(e){errModal(e.message,()=>chairFromPhoto(done));return}
+  gclose();const base=inList(CHAIRS,a.base)?a.base:'crossback',col=hexRgb(a.color)?'#'+a.color.replace('#','').toUpperCase():'Natural',cu=hexRgb(a.cojin)?'#'+a.cojin.replace('#','').toUpperCase():'';
+  const c={id:'cc'+Date.now().toString(36),name:String(a.nombre||'Mi silla').slice(0,40),base,color:col,cushion:cu,photo:photoURL(img,160,.8),nota:a.diferencias||''};
+  P.settings=P.settings||{};P.settings.chairsCustom=[...myChairs(),c];
+  let th='';try{th=await chairThumb(base,col)}catch(e){}
+  const sh=gmodal(`<h2>${esc(c.name)}</h2><div class="phrev"><img src="${photoURL(img,400,.8)}" alt="Tu foto"><div>${th?`<img src="${th}" alt="Como queda en la app" style="width:128px;height:128px;border-radius:10px;display:block;margin:0 auto 8px">`:''}<p class="note">En la app: forma ${esc(chairName(base))}, con el color de tu foto${cu?' y su cojín':''}.${c.nota?' '+esc(c.nota):''}</p></div></div>
+   <p class="note">Queda guardada en "Mis sillas" de este proyecto para usarla cuando quieras.</p><div class="actions"><button class="btn" id="mcAll">Usar en todas las sillas del evento</button><button class="btn primary" id="mcOne">Usar aquí</button></div>`);
+  sh.querySelector('#mcOne').onclick=()=>{gclose();done(c,false)};sh.querySelector('#mcAll').onclick=()=>{gclose();done(c,true)}}
+function chairAllStyle(c){const ch={type:c.base,color:c.color,cushion:c.cushion||'',deco:''};applyMine(ch,c);chairAll(ch)}
+const CHTH={};let CHR=null;
+async function chairThumb(type,color){const key=type+'|'+color;if(CHTH[key])return CHTH[key];await ensureThree();
+  if(!CHR){const cv=document.createElement('canvas');cv.width=cv.height=128;CHR=makeRenderer(cv,'media',1);CHR.setSize(128,128,false)}
+  const sc=new THREE.Scene();sc.background=new THREE.Color('#D9D3C7');sc.add(new THREE.HemisphereLight(0xffffff,0x8a8478,.55));const dl=new THREE.DirectionalLight(0xffffff,1.1);dl.position.set(-2,3,2.5);sc.add(dl);const dl2=new THREE.DirectionalLight(0xfff4e6,.35);dl2.position.set(3,1,-1);sc.add(dl2);CHR.toneMappingExposure=.95;
+  const g=chair3D({type,color,cushion:'',deco:''},{});const bb=new THREE.Box3().setFromObject(g),sz=bb.getSize(new THREE.Vector3()),ct=bb.getCenter(new THREE.Vector3());g.position.sub(ct);sc.add(g);
+  const r=Math.max(sz.x,sz.y,sz.z),cam=new THREE.PerspectiveCamera(32,1,.01,50);cam.position.set(r*1.25,r*.75,r*1.75);cam.lookAt(0,0,0);CHR.render(sc,cam);
+  CHTH[key]=CHR.domElement.toDataURL('image/png');sc.remove(g);return CHTH[key]}
+function fillThumbs(root,color){root.querySelectorAll('img[data-thumb]').forEach(async im=>{try{im.src=await chairThumb(im.dataset.thumb,color||'Blanco')}catch(e){}})}
+function chairFields(ch){return `<div class="field"><label>Modelo</label>${chairGrid(ch)}<select data-k="chair.type" hidden>${opts(CHAIRS,ch.type)}</select></div><div class="field"><label>Color de la silla</label>${swatches('chair.color',CHAIRCOL,ch.color)}</div><div class="field"><label>Cojín</label>${swatches('chair.cushion',LINENS,ch.cushion,true,'Sin cojín')}</div><div class="field"><label>Decoración en la silla</label><select data-k="chair.deco">${opts(CHAIRDECO,ch.deco||'')}</select></div>${ch.deco?`<div class="field"><label>Color de la decoración</label>${swatches('chair.decoColor',LINENS,ch.decoColor)}</div>`:''}`}
 function renderEdit(){
   const el=$('#tab-edit');const it=P.items.find(i=>i.id===sel);
   if(!it){el.innerHTML=`<section><h3>Nada seleccionado</h3><p class="note">Toca una mesa o un elemento del plano para cambiar su tamaño, sillas, mantel, camino, montaje de cada lugar, centro de mesa e invitados.</p><p class="note">Atajos en computadora: flechas para mover, R para girar 15°, Ctrl+D para duplicar, Supr para borrar.</p></section>`;return}
@@ -1147,6 +1199,10 @@ function renderEdit(){
   h+=`<section style="margin-top:14px"><div class="actions"><button class="btn" data-act="dup">Duplicar</button>${TBL.has(k)&&!d.cocktail?'<button class="btn" data-act="style">Aplicar este estilo a todas las mesas</button>':''}<button class="btn danger" data-act="del">Eliminar</button></div></section>`;
   const st=el.scrollTop;el.innerHTML=h;el.scrollTop=st;
   el.querySelectorAll('details').forEach(dt=>dt.addEventListener('toggle',()=>{dt.open?openSec.add(dt.dataset.sec):openSec.delete(dt.dataset.sec)}));
+  el.querySelectorAll('.chgrid [data-ct]').forEach(b=>b.onclick=()=>{const sl=b.closest('.field').querySelector('select[data-k="chair.type"]');delete it.chair.custom;sl.value=b.dataset.ct;sl.dispatchEvent(new Event('change'))});
+  el.querySelectorAll('.chgrid [data-cc]').forEach(b=>b.onclick=()=>{const c=myChairs().find(x=>x.id===b.dataset.cc);if(!c)return;applyMine(it.chair,c);commit();renderEdit()});
+  el.querySelectorAll('.chgrid [data-cup]').forEach(b=>b.onclick=()=>chairFromPhoto((c,all)=>{if(all)chairAllStyle(c);else{applyMine(it.chair,c);delete it.seatCh;commit();renderEdit();toast('Silla aplicada.')}}));
+  if(it.chair)fillThumbs(el,it.chair.color);
   el.querySelectorAll('[data-k]').forEach(inp=>{
     const discrete=inp.type==='checkbox'||inp.tagName==='SELECT';
     inp.addEventListener(discrete?'change':'input',()=>{setPath(it,inp);dirty=true;
@@ -1254,7 +1310,7 @@ async function loadPlan(f){let S;
 function inventory(){
   const G={};const keys=['Mesas','Sillas','Cojines','Decoración de sillas','Mantelería','Sobremanteles','Caminos de mesa','Platos base','Servilletas','Cubiertos','Cristalería','Centros de mesa','Otros elementos'];keys.forEach(k=>G[k]={});
   let seats=0,assigned=0;const add=(g,k,n)=>{G[g][k]=(G[g][k]||0)+(n??1)};
-  const chairAdd=(ch,n,extra)=>{add('Sillas',`${chairName(ch.type)}|${colorName(ch.color)}${extra||''}`,n);if(ch.cushion&&ch.type!=='acapulco')add('Cojines',`Cojín ${colorName(ch.cushion)}|`,n);if(ch.deco)add('Decoración de sillas',`${nm(CHAIRDECO,ch.deco)}|${colorName(ch.decoColor)}`,n)};
+  const chairAdd=(ch,n,extra)=>{add('Sillas',`${chairNm(ch)}|${colorName(ch.color)}${extra||''}`,n);if(ch.cushion&&ch.type!=='acapulco')add('Cojines',`Cojín ${colorName(ch.cushion)}|`,n);if(ch.deco)add('Decoración de sillas',`${nm(CHAIRDECO,ch.deco)}|${colorName(ch.decoColor)}`,n)};
   for(const it of P.items){const d=DEFS[it.t],k=d.kind;
     if(TBL.has(k)){const L=it.linen,bare=L.fabric==='ninguno';
       const sz=k==='round'?`Ø${m2(it.w)} m`:k==='square'?`${m2(it.w)} × ${m2(it.w)} m`:k==='serp'?`radio ${m2(it.rad)} m, ${it.ang}°`:`${m2(it.w)} × ${m2(it.h)} m`;
@@ -1488,7 +1544,7 @@ function renderPrompt(){const v=P.venue,ts=P.items.filter(i=>TBL.has(DEFS[i.t].k
   if(ts.length)L.push(`Mesas: ${Object.entries(byType).map(([n,c])=>`${c} ${n}${c>1?'s':''}`).join(', ')}, con ${ts.reduce((a,t)=>a+(+t.seats||0),0)} lugares en total.`);
   if(st){const l=st.linen,c=st.chair,p=st.place,cn=st.center;
     L.push(`Mantel: ${l.fabric==='ninguno'?'sin mantel, mesa de '+nm(SURFACES,l.surface).toLowerCase():nm(FABRICS,l.fabric).toLowerCase()+' color '+colorName(l.color).toLowerCase()+(l.drop==='piso'?' hasta el piso':' con caída corta')}.${st.overlay&&st.overlay.fabric?' Sobremantel de '+nm(OVERLAYS,st.overlay.fabric).toLowerCase()+' '+colorName(st.overlay.color).toLowerCase()+'.':''}${st.runner&&st.runner.style?' Camino de mesa: '+nm(RUNNERS,st.runner.style).toLowerCase()+(st.runner.style!=='follaje'?' '+colorName(st.runner.color).toLowerCase():'')+'.':''}`);
-    L.push(`Sillas: ${chairName(c.type)} color ${colorName(c.color).toLowerCase()}${c.cushion?', con cojín '+colorName(c.cushion).toLowerCase():''}${c.deco?', decoradas con '+nm(CHAIRDECO,c.deco).toLowerCase():''}.`);
+    L.push(`Sillas: ${chairNm(c)} color ${colorName(c.color).toLowerCase()}${c.cushion?', con cojín '+colorName(c.cushion).toLowerCase():''}${c.deco?', decoradas con '+nm(CHAIRDECO,c.deco).toLowerCase():''}.`);
     if(p&&p.on)L.push(`Cada lugar: ${p.charger?'plato base '+nm(CHARGERS,p.charger).toLowerCase()+', ':''}plato blanco, servilleta ${colorName(p.napkin).toLowerCase()} (${nm(FOLDS,p.fold).toLowerCase()}), cubiertos ${nm(CUTLERY,p.cutlery).toLowerCase()} y ${p.glasses} copa${p.glasses===1?'':'s'} ${p.glass==='cristal'?'de cristal':p.glass==='dorado'?'de cristal con filo dorado':'de cristal color '+nm(GLASS,p.glass).toLowerCase()}.`);
     if(cn&&cn.type!=='ninguno')L.push(`Centro de mesa: ${nm(CENTERS,cn.type).toLowerCase()}${cn.type!=='velas'?` con ${nm(FLOWERS,cn.flower).toLowerCase()} en tonos ${cn.palette==='De la foto'?'como en la foto de referencia':cn.palette.toLowerCase()}, en florero ${({cristal:'de cristal',dorado:'dorado',plata:'plateado',ceramica:'de cerámica blanca',barro:'de barro',madera:'de madera',mimbre:'de mimbre',mercurio:'de vidrio mercurio'})[cn.vase]||''}`:''}.`)}
   const ambItems={};for(const it of P.items)if(AMB.has(it.t)&&it.t!=='piso'){const n=DEFS[it.t].name.toLowerCase();ambItems[n]=(ambItems[n]||0)+1}
