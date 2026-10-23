@@ -822,12 +822,16 @@ async function cutPiece(a,b){const c=erCanvas();if(!c){toast('Primero sube un pl
   const cx=c.getContext('2d');cx.fillStyle=holeFill(c,X,Y);cx.fillRect(X,Y,Wd,Hd);ER.live=true;
   const it=placePiece(pc,X,Y,Wd,Hd,c);await commitPlan();dirty=true;toast('Pieza separada. Recorta más o toca Listo para moverlas.');return it}
 /* Detecta lo dibujado en el plano como manchas separadas (cada mesa con sus sillas = una mancha) */
-let BLOB=null;
-function blobs(){const c=erCanvas();if(!c)return null;if(BLOB&&BLOB.src===ER.src&&BLOB.w===c.width)return BLOB;
+let BLOB=null,BLOBS={};
+function blobs(kind){kind=kind||'all';const c=erCanvas();if(!c)return null;const K=BLOBS[kind];if(K&&K.src===ER.src&&K.w===c.width)return K;
   const M0=Math.max(c.width,c.height),f=Math.min(1,1600/M0),sw=Math.max(1,Math.round(c.width*f)),sh=Math.max(1,Math.round(c.height*f));
   const t=document.createElement('canvas');t.width=sw;t.height=sh;const tx=t.getContext('2d',{willReadFrequently:true});tx.fillStyle='#fff';tx.fillRect(0,0,sw,sh);tx.drawImage(c,0,0,sw,sh);const d=tx.getImageData(0,0,sw,sh).data,N=sw*sh;
   // tinta = todo lo que no es blanco, incluidas las sillas en gris clarito
-  const m=new Uint8Array(N);for(let i=0;i<N;i++)m[i]=Math.min(d[i*4],d[i*4+1],d[i*4+2])<237?1:0;
+  const mn0=new Uint8Array(N);for(let i=0;i<N;i++)mn0[i]=Math.min(d[i*4],d[i*4+1],d[i*4+2]);
+  const m=new Uint8Array(N);
+  if(kind==='light'){// solo los trazos grises claritos (sillas), sin las líneas oscuras ni su orilla
+    for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){const i=y*sw+x,v=mn0[i];if(v>=237||v<110)continue;let nd=false;for(let dy=-1;dy<=1&&!nd;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<sw&&Y<sh&&mn0[Y*sw+X]<110){nd=true;break}}if(!nd)m[i]=1}}
+  else for(let i=0;i<N;i++)m[i]=mn0[i]<237?1:0;
   const R=1,h=new Uint8Array(N),dm=new Uint8Array(N);
   for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!m[y*sw+x])continue;for(let k=Math.max(0,x-R);k<=Math.min(sw-1,x+R);k++)h[y*sw+k]=1}
   for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){if(!h[y*sw+x])continue;for(let k=Math.max(0,y-R);k<=Math.min(sh-1,y+R);k++)dm[k*sw+x]=1}
@@ -837,7 +841,7 @@ function blobs(){const c=erCanvas();if(!c)return null;if(BLOB&&BLOB.src===ER.src
       if(x>0&&dm[i-1]&&!lab[i-1]){lab[i-1]=id;st[sp++]=i-1}if(x<sw-1&&dm[i+1]&&!lab[i+1]){lab[i+1]=id;st[sp++]=i+1}
       if(y>0&&dm[i-sw]&&!lab[i-sw]){lab[i-sw]=id;st[sp++]=i-sw}if(y<sh-1&&dm[i+sw]&&!lab[i+sw]){lab[i+sw]=id;st[sp++]=i+sw}}
     if(q.n){q.r/=q.n;q.g/=q.n;q.b/=q.n}q.w=q.x1-q.x0+1;q.h=q.y1-q.y0+1;q.ids=[id];comps.push(q)}
-  BLOB={src:ER.src,w:c.width,f,sw,sh,lab,comps,owner:new Int32Array(comps.length+1).map((_,i)=>i)};mergeFrags(BLOB);BLOB.comps=BLOB.comps.filter(q=>!q.dead);return BLOB}
+  const B={src:ER.src,w:c.width,f,sw,sh,lab,comps,kind,ink:m,owner:new Int32Array(comps.length+1).map((_,i)=>i)};mergeFrags(B);B.comps=B.comps.filter(q=>!q.dead);BLOBS[kind]=B;return B}
 // Una silla dibujada a veces son varios trazos sueltos (respaldo, patas): se juntan los pedacitos con su silla
 function mergeFrags(B){const u=blobCm(B),dim=q=>Math.max(q.w*u.x,q.h*u.y),small=B.comps.filter(q=>dim(q)<95);
   const thin=q=>Math.min(q.w*u.x,q.h*u.y)<15,frags=small.filter(q=>dim(q)<30||thin(q)).sort((a,b)=>dim(b)-dim(a));
@@ -856,7 +860,14 @@ function textIds(L){// letras: van en renglón, pegadas y de anchos distintos; l
   const G=new Map();for(const q of L){const r=fd(q.id);if(!G.has(r))G.set(r,[]);G.get(r).push(q)}const out=new Set();
   const cv=a=>{const mu=a.reduce((x,y)=>x+y,0)/a.length;return Math.sqrt(a.reduce((x,y)=>x+(y-mu)**2,0)/a.length)/(mu||1)};
   for(const g of G.values())if(g.length>=3&&(cv(g.map(q=>q.w))>.2||cv(g.map(q=>q.h))>.2))for(const q of g)out.add(q.id);return out}
-function cutComp(B,q,asChair){const c=erCanvas(),f=B.f,pd0=Math.ceil(2/f),X=clamp(Math.floor(q.x0/f)-pd0,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-pd0,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+pd0-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+pd0-Y,1,c.height-Y);
+// Hacia dónde mira la silla dibujada: el lado con más trazo es el respaldo; la silla mira al lado contrario
+function chairAngle(B,q){const u=blobCm(B),own=new Set(q.ids),bx=(q.x0+q.x1)/2,by=(q.y0+q.y1)/2,P=[];
+  for(let y=q.y0;y<=q.y1;y++)for(let x=q.x0;x<=q.x1;x++){const i=y*B.sw+x;if(B.ink[i]&&own.has(B.lab[i]))P.push([(x-bx)*u.x,(y-by)*u.y])}
+  if(P.length<6)return null;let R=0;for(const [X,Y] of P)R=Math.max(R,Math.hypot(X,Y));const sc=[];
+  for(let k=0;k<72;k++){const a=k*Math.PI/36,dx=Math.cos(a),dy=Math.sin(a);let m=0;for(const [X,Y] of P){const pr=X*dx+Y*dy;if(pr>.3*R)m+=pr}sc.push(m)}
+  let best=0;for(let k=1;k<72;k++)if(sc[k]>sc[best])best=k;const a=best*Math.PI/36,fx=-Math.cos(a),fy=-Math.sin(a);
+  return {r:Math.round(((Math.atan2(fx,-fy)*180/Math.PI)%360+360)%360/5)*5%360,conf:sc[best]/Math.max(1e-6,sc[(best+36)%72])}}
+function cutComp(B,q,asChair){const ang=asChair?chairAngle(B,q):null;const c=erCanvas(),f=B.f,pd0=Math.ceil(2/f),X=clamp(Math.floor(q.x0/f)-pd0,0,c.width-1),Y=clamp(Math.floor(q.y0/f)-pd0,0,c.height-1),Wd=clamp(Math.ceil((q.x1+1)/f)+pd0-X,1,c.width-X),Hd=clamp(Math.ceil((q.y1+1)/f)+pd0-Y,1,c.height-Y);
   const own=new Uint8Array(B.owner.length+1);for(const id of q.ids)own[id]=1;
   const cx=c.getContext('2d',{willReadFrequently:true}),fill=holeFill(c,X,Y),src=cx.getImageData(X,Y,Wd,Hd),pd=new ImageData(Wd,Hd),a=src.data,b=pd.data;
   const fc=document.createElement('canvas').getContext('2d');fc.fillStyle=fill;fc.fillRect(0,0,1,1);const F=fc.getImageData(0,0,1,1).data;
@@ -865,25 +876,51 @@ function cutComp(B,q,asChair){const c=erCanvas(),f=B.f,pd0=Math.ceil(2/f),X=clam
     if(own[l]){const mn=Math.min(a[o],a[o+1],a[o+2]);b[o]=a[o];b[o+1]=a[o+1];b[o+2]=a[o+2];b[o+3]=mn>247?0:mn>236?Math.round(255*(247-mn)/11):255}else if(l!==0)continue;
     a[o]=F[0];a[o+1]=F[1];a[o+2]=F[2];a[o+3]=255}}
   cx.putImageData(src,X,Y);ER.live=true;
-  if(asChair){const v=P.venue,k=(v.imgW||c.width)/c.width,it=makeItem('silla',Math.round((X+Wd/2)*k*v.cmPerPx),Math.round((Y+Hd/2)*k*(v.cmPerPxY||v.cmPerPx)));P.items.push(it);return it}
+  if(asChair){const v=P.venue,k=(v.imgW||c.width)/c.width,it=makeItem('silla',Math.round((X+Wd/2)*k*v.cmPerPx),Math.round((Y+Hd/2)*k*(v.cmPerPxY||v.cmPerPx)));if(ang){it.r=ang.r;it.conf=ang.conf}P.items.push(it);return it}
   const pc=document.createElement('canvas');pc.width=Wd;pc.height=Hd;pc.getContext('2d').putImageData(pd,0,0);return placePiece(pc,X,Y,Wd,Hd,c)}
-function tableComps(B){const M=Math.max(B.sw,B.sh),u=blobCm(B);
-  const cand=B.comps.filter(q=>{const mx=Math.max(q.w,q.h);return mx>=4&&mx<=.25*M&&Math.min(q.w,q.h)/mx>.2&&q.n/(q.w*q.h)>.03&&!isVeg(q)});
-  const txt=textIds(cand.filter(q=>Math.max(q.w*u.x,q.h*u.y)<150));
-  const sim=(q,o)=>Math.abs(o.w-q.w)/Math.max(o.w,q.w)<.3&&Math.abs(o.h-q.h)/Math.max(o.h,q.h)<.3;
-  return cand.filter(q=>!txt.has(q.id)&&(isChairBlob(B,q)||Math.max(q.w,q.h)>=.012*M)&&cand.some(o=>o!==q&&!txt.has(o.id)&&sim(q,o))).map(q=>({q,chair:isChairBlob(B,q)}))}
+// Filas de sillas pegadas: se parten en sillas iguales
+function splitRow(B,q){const u=blobCm(B),W=q.w*u.x,H=q.h*u.y,sm=Math.min(W,H),L=Math.max(W,H);if(sm<28||sm>80||L/sm<1.7||L>14*sm)return null;
+  const k=Math.round(L/sm);if(Math.abs(L/sm-k)>.35)return null;const out=[];
+  for(let t=0;t<k;t++){const p={...q,ids:q.ids,part:true};if(W>=H){p.x0=Math.round(q.x0+t*q.w/k);p.x1=Math.round(q.x0+(t+1)*q.w/k)-1}else{p.y0=Math.round(q.y0+t*q.h/k);p.y1=Math.round(q.y0+(t+1)*q.h/k)-1}p.w=p.x1-p.x0+1;p.h=p.y1-p.y0+1;out.push(p)}return out}
+const boxOv=(a,b)=>{const w=Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0),h=Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0);return w>0&&h>0?w*h/Math.min(a.w*a.h,b.w*b.h):0};
+function chairsOf(B,inBox){const u=blobCm(B),txt=textIds(B.comps.filter(q=>!isVeg(q)&&Math.max(q.w*u.x,q.h*u.y)<150));const out=[];for(const q of B.comps){if(isVeg(q)||txt.has(q.id))continue;if(inBox&&!inBox(q))continue;if(isChairBlob(B,q))out.push({B,q});else{const parts=splitRow(B,q);if(parts&&parts.every(p=>isChairBlob(B,p)))for(const p of parts)out.push({B,q:p})}}return out}
+// Busca sillas (en dos pasadas: trazos claritos y todo) y piezas repetidas; opcionalmente solo dentro de un recuadro
+function findPlanThings(inBox,piecesToo){const BL=blobs('light'),BA=blobs('all');if(!BA)return {chairs:[],pieces:[]};
+  const cl=chairsOf(BL,inBox);const ca=chairsOf(BA,inBox).filter(x=>!cl.some(y=>boxOv(x.q,y.q)>.3));let chairs=[...cl,...ca];
+  if(!inBox){const sim=(q,o)=>Math.abs(o.w-q.w)/Math.max(o.w,q.w)<.35&&Math.abs(o.h-q.h)/Math.max(o.h,q.h)<.35;chairs=chairs.filter(x=>chairs.some(y=>y!==x&&sim(x.q,y.q)))}
+  let pieces=[];if(piecesToo){const M=Math.max(BA.sw,BA.sh),u=blobCm(BA);
+    const cand=BA.comps.filter(q=>{const mx=Math.max(q.w,q.h);return mx>=4&&mx<=.25*M&&Math.min(q.w,q.h)/mx>.2&&q.n/(q.w*q.h)>.03&&!isVeg(q)&&!chairs.some(y=>boxOv(q,y.q)>.2)&&(!inBox||inBox(q))});
+    const txt=textIds(cand.filter(q=>Math.max(q.w*u.x,q.h*u.y)<150));const sim=(q,o)=>Math.abs(o.w-q.w)/Math.max(o.w,q.w)<.3&&Math.abs(o.h-q.h)/Math.max(o.h,q.h)<.3;
+    pieces=cand.filter(q=>!txt.has(q.id)&&Math.max(q.w,q.h)>=.012*M&&cand.some(o=>o!==q&&!txt.has(o.id)&&sim(q,o))).map(q=>({B:BA,q}))}
+  return {chairs,pieces}}
+function cutThings(T){const CH=[],PC=[];for(const {B,q} of T.chairs)CH.push(cutComp(B,q,true));for(const {B,q} of T.pieces)PC.push(cutComp(B,q,false));
+  for(const ch of CH){const sure=ch.conf>1.12;delete ch.conf;if(sure)continue;let best=null,bd=1e9;for(const t of PC){const d=Math.hypot(t.x-ch.x,t.y-ch.y);if(d<Math.max(t.w,t.h)/2+90&&d<bd){bd=d;best=t}}if(best)ch.r=Math.round(((Math.atan2(best.x-ch.x,-(best.y-ch.y))*180/Math.PI)%360+360)%360)}
+  return {CH,PC}}
 async function autoPieces(){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}toast('Buscando las mesas y sillas dibujadas…');await new Promise(r=>setTimeout(r,30));
-  const B=blobs(),L=tableComps(B);if(!L.length){toast('No encontré mesas ni sillas separadas en el plano. Toca cada una con las tijeras o márcala con un recuadro.');setMode('cut');return}
-  let nc=0,np=0;const CH=[],PC=[];for(const {q,chair} of L){const it=cutComp(B,q,chair);(chair?CH:PC).push(it);chair?nc++:np++}
-  // cada silla mira hacia la mesa que tiene al lado
-  for(const ch of CH){let best=null,bd=1e9;for(const t of PC){const d=Math.hypot(t.x-ch.x,t.y-ch.y);if(d<Math.max(t.w,t.h)/2+90&&d<bd){bd=d;best=t}}if(best)ch.r=Math.round(((Math.atan2(best.x-ch.x,-(best.y-ch.y))*180/Math.PI)%360+360)%360)}await commitPlan();BLOB=null;setMode(null);dirty=true;
-  const parts=[];if(nc)parts.push(`${nc} silla${nc>1?'s':''}`);if(np)parts.push(`${np} pieza${np>1?'s':''}`);
-  toast(`Separé ${parts.join(' y ')} del plano. Toca una silla para cambiarle el estilo. Si falta algo, usa las tijeras y tócalo.`)}
-async function clickCut(w){const c=erCanvas();if(!c){toast('Primero sube un plano.');return}const B=blobs(),p=w2img(w),x=Math.floor(p.x*B.f),y=Math.floor(p.y*B.f);let id=0,best=1e9;
-  for(let dy=-8;dy<=8;dy++)for(let dx=-8;dx<=8;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=B.sw||Y>=B.sh)continue;const l=B.lab[Y*B.sw+X];if(l&&dx*dx+dy*dy<best){best=dx*dx+dy*dy;id=l}}
-  if(!id){toast('Ahí no hay nada dibujado. Toca justo encima.');return}const oid=B.owner[id],q=B.comps.find(c=>c.id===oid),M=Math.max(B.sw,B.sh);if(!q)return;
-  if(Math.max(q.w,q.h)>.4*M){toast('Eso está pegado a las paredes del plano. Márcalo arrastrando un recuadro.');return}
-  const chair=isChairBlob(B,q);cutComp(B,q,chair);await commitPlan();BLOB=null;dirty=true;toast(chair?'Silla separada. Toca otra o Listo; luego tócala para elegir su estilo.':'Pieza separada. Toca otra o Listo para moverlas.')}
+  const T=findPlanThings(null,true);if(!T.chairs.length&&!T.pieces.length){toast('No encontré mesas ni sillas separadas en el plano. Tócalas una por una para separarlas.');return}
+  const {CH,PC}=cutThings(T);await commitPlan();BLOBS={};setMode(null);dirty=true;
+  const parts=[];if(CH.length)parts.push(`${CH.length} silla${CH.length>1?'s':''}`);if(PC.length)parts.push(`${PC.length} pieza${PC.length>1?'s':''}`);
+  toast(`Separé ${parts.join(' y ')} del plano. Si falta alguna, tócala para separarla, o arrastra un recuadro para tomar varias.`)}
+// Tocar algo dibujado en el plano lo vuelve objeto
+async function pickFromPlan(w,quiet){const c=erCanvas();if(!c)return null;const p=w2img(w);
+  const near=B=>{const x=Math.floor(p.x*B.f),y=Math.floor(p.y*B.f);let id=0,best=1e9;for(let dy=-6;dy<=6;dy++)for(let dx=-6;dx<=6;dx++){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=B.sw||Y>=B.sh)continue;const l=B.lab[Y*B.sw+X];if(l&&dx*dx+dy*dy<best){best=dx*dx+dy*dy;id=l}}return id?B.comps.find(c=>c.id===B.owner[id]):null};
+  for(const kind of ['light','all']){const B=blobs(kind),q=near(B);if(!q)continue;const x=p.x*B.f,y=p.y*B.f;
+    if(isChairBlob(B,q)&&!isVeg(q)){const it=cutComp(B,q,true);delete it.conf;await commitPlan();BLOBS={};return it}
+    const parts=splitRow(B,q);if(parts&&parts.every(pp=>isChairBlob(B,pp))){const pp=parts.find(a=>x>=a.x0-2&&x<=a.x1+2&&y>=a.y0-2&&y<=a.y1+2)||parts[0];const it=cutComp(B,pp,true);delete it.conf;await commitPlan();BLOBS={};return it}
+    if(kind==='all'){const M=Math.max(B.sw,B.sh);if(Math.max(q.w,q.h)<=.25*M&&!isVeg(q)){const it=cutComp(B,q,false);await commitPlan();BLOBS={};return it}}}
+  return null}
+async function clickCut(w){if(!erCanvas()){toast('Primero sube un plano.');return}const it=await pickFromPlan(w);dirty=true;
+  if(!it){toast('Ahí no encontré algo suelto. Si está pegado a otras líneas, márcalo arrastrando un recuadro.');return}
+  toast(it.t==='silla'?'Silla separada. Toca otra o Listo.':'Pieza separada. Toca otra o Listo para moverlas.')}
+// Seleccionar varios arrastrando un recuadro: toma los objetos y también las sillas dibujadas del plano
+let MSEL=new Set();
+async function marqueeSelect(a,b,add){const x0=Math.min(a.x,b.x),x1=Math.max(a.x,b.x),y0=Math.min(a.y,b.y),y1=Math.max(a.y,b.y);
+  const ids=add?new Set(MSEL.size?MSEL:sel?[sel]:[]):new Set();for(const it of P.items){if(it.t==='piso')continue;if(it.x>=x0&&it.x<=x1&&it.y>=y0&&it.y<=y1)ids.add(it.id)}
+  if(P.venue.mode==='image'&&P.venue.img&&erCanvas()){const BA=blobs('all'),A=w2img({x:x0,y:y0}),Bp=w2img({x:x1,y:y1}),f=BA.f,X0=A.x*f,Y0=A.y*f,X1=Bp.x*f,Y1=Bp.y*f;
+    const T=findPlanThings(q=>q.x0>=X0-2&&q.x1<=X1+2&&q.y0>=Y0-2&&q.y1<=Y1+2,false);if(T.chairs.length){const {CH}=cutThings(T);await commitPlan();BLOBS={};for(const it of CH)ids.add(it.id)}}
+  setMulti(ids)}
+function setMulti(ids){ids=[...ids];if(ids.length===1){MSEL=new Set();select(ids[0]);return}MSEL=new Set(ids);sel=null;SEAT=null;dirty=true;renderEdit();if(ids.length&&window.innerWidth>820)showTab('edit');
+  if(ids.length)toast(`${ids.length} seleccionados. Cámbialos en Editar, o arrástralos para moverlos juntos.`)}
 function askPlanTables(img){const sh=gmodal(`<h2>¿El plano ya trae mesas dibujadas?</h2><p class="note">Las puedo convertir en mesas y sillas que se mueven.</p>
    <div class="grid" style="gap:8px;margin-top:14px"><button class="btn primary" id="ptAuto">Sí: separarlas automáticamente</button><p class="note" style="margin:-4px 0 4px">Cada silla dibujada se vuelve una silla real a la que le eliges el estilo; las mesas y otros objetos quedan como piezas movibles.</p>
    <button class="btn" id="ptAI">Sí: convertirlas en mesas reales con IA</button><p class="note" style="margin:-4px 0 4px">La IA cuenta las mesas y sillas, las pone en 3D y quita las dibujadas del plano.</p>
@@ -907,6 +944,8 @@ function render(){
   {const hasPlan=P.venue.mode==='image'&&!!P.venue.img,e1=$('#erBtn'),e2=$('#cutBtn');if(e1&&e1.hidden===hasPlan){e1.hidden=!hasPlan;e2.hidden=!hasPlan}if(e1){e1.classList.toggle('on',mode==='erase');e2.classList.toggle('on',mode==='cut')}{const hb=$('#handBtn');if(hb)hb.classList.toggle('on',mode==='hand')}}
   if(mode==='refscale'&&REF){const g=css('--gold')||'#A9843F',k=DEFS[REF.it.t].kind;ctx.save();ctx.globalAlpha=.82;drawItem(ctx,REF.it,view.z,{});ctx.restore();
     ctx.save();ctx.translate(REF.it.x,REF.it.y);ctx.rotate(REF.it.r*Math.PI/180);ctx.strokeStyle=g;ctx.lineWidth=2.5/view.z;ctx.setLineDash([7/view.z,5/view.z]);if(TBL.has(k))linenPath(ctx,REF.it,k,0);else{ctx.beginPath();ctx.rect(-24,-24,48,48)}ctx.stroke();ctx.restore()}
+  if(drag&&drag.type==='marq'&&drag.moved){const a=drag.a,b=drag.b;ctx.save();ctx.fillStyle='rgba(47,93,70,.10)';ctx.strokeStyle='#2F5D46';ctx.lineWidth=1.5/view.z;ctx.setLineDash([6/view.z,4/view.z]);ctx.fillRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.restore()}
+  if(MSEL.size){ctx.save();ctx.strokeStyle=css('--gold')||'#A9843F';ctx.lineWidth=2/view.z;ctx.setLineDash([5/view.z,3/view.z]);for(const o of P.items){if(!MSEL.has(o.id))continue;const b=bounds(o);ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.r*Math.PI/180);ctx.strokeRect(b.x0-4/view.z,b.y0-4/view.z,b.x1-b.x0+8/view.z,b.y1-b.y0+8/view.z);ctx.restore()}ctx.restore()}
   const s=P.items.find(i=>i.id===sel);
   if(s){const b=bounds(s);ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.r*Math.PI/180);ctx.strokeStyle=css('--gold')||'#A9843F';ctx.lineWidth=2/view.z;ctx.setLineDash([6/view.z,4/view.z]);
     ctx.strokeRect(b.x0-6/view.z,b.y0-6/view.z,b.x1-b.x0+12/view.z,b.y1-b.y0+12/view.z);ctx.setLineDash([]);
@@ -954,8 +993,10 @@ cv.addEventListener('pointerdown',e=>{
   if(s){const b=bounds(s),hp=toWorldPt(s,0,b.y0-6/view.z-28/view.z),hs=w2s(hp.x,hp.y);if(Math.hypot(hs.x-sx,hs.y-sy)<18){drag={type:'rot',it:s,moved:false,or:s.r};return}}
   const it=hit(w.x,w.y);
   if(it&&it.t==='piso'&&sel!==it.id){select(it.id);drag={type:'pan',sx,sy,vx:view.x,vy:view.y}}
+  else if(it&&MSEL.has(it.id)){const its=P.items.filter(o=>MSEL.has(o.id));drag={type:'gmove',its,o:its.map(o=>[o.x,o.y]),w0:w,sx,sy,moved:false}}
   else if(it){const seat=sel===it.id?seatAt(it,w):null;select(it.id);drag={type:'move',it,dx:w.x-it.x,dy:w.y-it.y,moved:false,sx,sy,ox:it.x,oy:it.y,touch:e.pointerType==='touch',seat}}
-  else{if(sel)select(null);drag={type:'pan',sx,sy,vx:view.x,vy:view.y}}
+  else if(e.pointerType!=='touch'){drag={type:'marq',a:w,b:w,sx,sy,moved:false,add:e.shiftKey||e.metaKey}}
+  else{if(sel||MSEL.size){MSEL=new Set();select(null)}drag={type:'pan',sx,sy,vx:view.x,vy:view.y,tap:w}}
 });
 cv.addEventListener('pointermove',e=>{
   if(mode==='erase'){const r0=cv.getBoundingClientRect();ER.hover=s2w(e.clientX-r0.left,e.clientY-r0.top);dirty=true}
@@ -964,6 +1005,8 @@ cv.addEventListener('pointermove',e=>{
     if(d<1)return;zoomAt(pinch.mx,pinch.my,d/pinch.d);view.x-=(mx-pinch.mx)/view.z;view.y-=(my-pinch.my)/view.z;pinch={d,mx,my};return}
   if(!drag)return;const w=s2w(sx,sy);
   if(drag.type==='erase'){eraseLine(drag.last,w);drag.last=w;return}
+  if(drag.type==='marq'){drag.b=w;if(Math.hypot(sx-drag.sx,sy-drag.sy)>4)drag.moved=true;dirty=true;return}
+  if(drag.type==='gmove'){if(!drag.moved&&Math.hypot(sx-drag.sx,sy-drag.sy)<3)return;drag.moved=true;busy=true;const dx=snap(w.x-drag.w0.x),dy=snap(w.y-drag.w0.y);drag.its.forEach((o,k)=>{o.x=drag.o[k][0]+dx;o.y=drag.o[k][1]+dy});dirty=true;return}
   if(drag.type==='cut'){drag.b=w;drag.moved=true;dirty=true;return}
   if(drag.type==='pan'){view.x=drag.vx-(sx-drag.sx)/view.z;view.y=drag.vy-(sy-drag.sy)/view.z;if(!busy&&Math.hypot(sx-drag.sx,sy-drag.sy)>3)busy=true;dirty=true}
   else if(drag.type==='move'){if(!drag.moved&&Math.hypot(sx-drag.sx,sy-drag.sy)<(drag.touch?8:3))return;drag.moved=true;busy=true;drag.it.x=snap(w.x-drag.dx);drag.it.y=snap(w.y-drag.dy);dirty=true}
@@ -974,9 +1017,13 @@ function endPtr(e){if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(pinch&&ptrs.size<2){pinch=null;if(ptrs.size===1){const p=[...ptrs.values()][0];drag={type:'pan',sx:p.x,sy:p.y,vx:view.x,vy:view.y}}}
   if(drag&&drag.type==='pan')cv.style.cursor=(mode==='hand'||KEYSP.on)?'grab':'';
   if(drag&&drag.type==='move'&&!drag.moved&&drag.seat!=null){const d=drag;drag=null;openSeat(d.it,d.seat)}
+  else if(drag&&drag.type==='marq'){const d=drag;drag=null;dirty=true;
+    if(d.moved)marqueeSelect(d.a,d.b,d.add);
+    else{if(sel||MSEL.size){MSEL=new Set();select(null)}if(P.venue.mode==='image'&&P.venue.img)pickFromPlan(d.a).then(it=>{if(it){select(it.id);toast(it.t==='silla'?'Silla lista: elige su estilo en Editar.':'Pieza lista: ya la puedes mover.')}})}}
+  else if(drag&&drag.type==='pan'&&drag.tap&&!busy&&P.venue.mode==='image'&&P.venue.img){const t=drag.tap;drag=null;pickFromPlan(t).then(it=>{if(it)select(it.id)})}
   else if(drag&&drag.type==='erase'){commitPlan()}
   else if(drag&&drag.type==='cut'){const d=drag;drag=null;const big=Math.abs(d.b.x-d.a.x)*view.z>8||Math.abs(d.b.y-d.a.y)*view.z>8;if(big)cutPiece(d.a,d.b);else clickCut(d.a);dirty=true}
-  else if(drag&&drag.moved){commit();if(drag.type==='move')renderEdit()}
+  else if(drag&&drag.moved){commit();if(drag.type==='move'||drag.type==='gmove')renderEdit()}
   if(!ptrs.size){drag=null;pinch=null;if(busy){busy=false;dirty=true}}}
 cv.addEventListener('pointerleave',()=>{if(ER.hover){ER.hover=null;dirty=true}});
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);cv.addEventListener('lostpointercapture',endPtr);
@@ -1003,6 +1050,8 @@ document.addEventListener('keydown',e=>{
   if(T3.on)return;
   if(e.key===' '){e.preventDefault();if(!KEYSP.on){KEYSP.on=true;cv.style.cursor='grab'}return}
   if(!mod&&(e.key==='+'||e.key==='='||e.key==='-')){e.preventDefault();zoomAt(cv.clientWidth/2,cv.clientHeight/2,e.key==='-'?1/1.25:1.25);return}
+  if(MSEL.size&&(e.key==='Delete'||e.key==='Backspace')){e.preventDefault();delMulti();return}
+  if(MSEL.size&&e.key==='Escape'){MSEL=new Set();renderEdit();dirty=true;return}
   const s=P.items.find(i=>i.id===sel);
   if(!s&&e.key.startsWith('Arrow')){e.preventDefault();const st=(e.shiftKey?240:70)/view.z;if(e.key==='ArrowLeft')view.x-=st;if(e.key==='ArrowRight')view.x+=st;if(e.key==='ArrowUp')view.y-=st;if(e.key==='ArrowDown')view.y+=st;dirty=true;return}
   if(!s)return;
@@ -1105,7 +1154,7 @@ function showTab(t){document.querySelectorAll('.tabs button').forEach(b=>b.setAt
   ['add','edit','venue','inv','proj'].forEach(k=>$('#tab-'+k).hidden=k!==t);
   if(t==='inv')renderInv();if(t==='proj')renderProj();if(t==='edit')renderEdit();if(t==='venue')renderVenue()}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-function select(id){if(!SEAT||SEAT.id!==id)SEAT=null;sel=id;dirty=true;renderEdit();if(id&&window.innerWidth>820)showTab('edit')}
+function select(id){if(!SEAT||SEAT.id!==id)SEAT=null;MSEL=new Set();sel=id;dirty=true;renderEdit();if(id&&window.innerWidth>820)showTab('edit')}
 
 /* Agregar */
 function thumb(key){const c=document.createElement('canvas');const r=2;c.width=56*r;c.height=56*r;const x=c.getContext('2d');
@@ -1163,8 +1212,20 @@ async function chairThumb(type,color){const key=type+'|'+color;if(CHTH[key])retu
   CHTH[key]=CHR.domElement.toDataURL('image/png');sc.remove(g);return CHTH[key]}
 function fillThumbs(root,color){root.querySelectorAll('img[data-thumb]').forEach(async im=>{try{im.src=await chairThumb(im.dataset.thumb,color||'Blanco')}catch(e){}})}
 function chairFields(ch){return `<div class="field"><label>Modelo</label>${chairGrid(ch)}<select data-k="chair.type" hidden>${opts(CHAIRS,ch.type)}</select></div><div class="field"><label>Color de la silla</label>${swatches('chair.color',CHAIRCOL,ch.color)}</div><div class="field"><label>Cojín</label>${swatches('chair.cushion',LINENS,ch.cushion,true,'Sin cojín')}</div><div class="field"><label>Decoración en la silla</label><select data-k="chair.deco">${opts(CHAIRDECO,ch.deco||'')}</select></div>${ch.deco?`<div class="field"><label>Color de la decoración</label>${swatches('chair.decoColor',LINENS,ch.decoColor)}</div>`:''}`}
+function delMulti(){const n=MSEL.size;P.items=P.items.filter(o=>!MSEL.has(o.id));MSEL=new Set();commit();renderEdit();dirty=true;toast(`Se borraron ${n}.`)}
+function renderMulti(el){const its=P.items.filter(o=>MSEL.has(o.id)),wc=its.filter(o=>o.chair&&chairCount(o)),nCh=wc.reduce((a,o)=>a+chairCount(o),0),first=(wc[0]&&wc[0].chair)||defaults().chair;
+  let h=`<p class="eyebrow">Selección</p><section><h3>${its.length} seleccionados</h3><p class="note">${nCh?`${nCh} silla${nCh>1?'s':''} en total. `:''}Arrástralos en el plano para moverlos juntos. Shift + arrastrar agrega más.</p></section>`;
+  if(nCh)h+=`<section><h3>Sillas de la selección</h3><div class="field"><label>Modelo</label>${chairGrid(first,'ms')}</div><div class="field"><label>Color</label><div class="sw" id="msC">${CHAIRCOL.map(([n,hx])=>`<button type="button" data-v="${esc(n)}" aria-pressed="${first.color===n}" title="${esc(n)}" aria-label="${esc(n)}" style="background:${hx}"></button>`).join('')}</div></div></section>`;
+  h+=`<section><div class="actions"><button class="btn" id="msX">Quitar selección</button><button class="btn danger" id="msDel">Borrar los ${its.length}</button></div></section>`;
+  el.innerHTML=h;fillThumbs(el,first.color);
+  const each=fn=>{for(const o of wc){fn(o.chair);delete o.seatCh}commit();renderMulti(el);dirty=true};
+  el.querySelectorAll('.chgrid [data-ct]').forEach(b=>b.onclick=()=>each(ch=>{ch.type=b.dataset.ct;delete ch.custom}));
+  el.querySelectorAll('.chgrid [data-cc]').forEach(b=>b.onclick=()=>{const c=myChairs().find(x=>x.id===b.dataset.cc);if(c)each(ch=>applyMine(ch,c))});
+  el.querySelectorAll('.chgrid [data-cup]').forEach(b=>b.onclick=()=>chairFromPhoto((c,all)=>{if(all)chairAllStyle(c);else each(ch=>applyMine(ch,c))}));
+  el.querySelectorAll('#msC button').forEach(b=>b.onclick=()=>each(ch=>{ch.color=b.dataset.v;delete ch.custom}));
+  el.querySelector('#msX').onclick=()=>{MSEL=new Set();renderEdit();dirty=true};el.querySelector('#msDel').onclick=delMulti}
 function renderEdit(){
-  const el=$('#tab-edit');const it=P.items.find(i=>i.id===sel);
+  const el=$('#tab-edit');if(MSEL.size>1){renderMulti(el);return}const it=P.items.find(i=>i.id===sel);
   if(!it){el.innerHTML=`<section><h3>Nada seleccionado</h3><p class="note">Toca una mesa o un elemento del plano para cambiar su tamaño, sillas, mantel, camino, montaje de cada lugar, centro de mesa e invitados.</p><p class="note">Atajos en computadora: flechas para mover, R para girar 15°, Ctrl+D para duplicar, Supr para borrar.</p></section>`;return}
   const d=DEFS[it.t],k=d.kind;let h=`<p class="eyebrow">${esc(d.name)}</p>`;
   if(TBL.has(k)&&!d.cocktail)h+=`<div class="field"><label for="ePre">Estilo rápido</label><div class="row"><select id="ePre" style="flex:1">${Object.entries(PRESETS).map(([k2,p])=>`<option value="${k2}">${p.name}</option>`).join('')}</select><button class="btn sm" data-act="preset">Aplicar</button></div><p class="note">Pone de un golpe mantel, sillas, montaje de lugar y centro de mesa. Después ajustas lo que quieras.</p></div><button class="btn primary" data-act="photo" style="width:100%;justify-content:center;margin-bottom:12px">Copiar estilo desde foto</button>${it.refPhoto?`<div class="refph"><img src="${it.refPhoto}" alt="Foto de referencia de la mesa"><div><b>Foto de referencia</b><p class="note" style="margin:2px 0 6px">Sale en el PDF junto al plano.</p><button class="btn sm" data-act="rmref">Quitar foto</button></div></div>`:''}`;
